@@ -1,0 +1,17 @@
+.env*
+!.env.example
+node_modules/
+data/
+secrets/*
+!secrets/README.md
+coverage/
+release/
+backups/
+*.log
+*.key
+*.pem
+*.p12
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db

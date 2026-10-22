@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="description" content="本地优先的多模型 AI 创作工作台">
+    <title>plaude chat</title>
+    <link rel="icon" href="/favicon.svg?v=mint-20261020" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/ui.css">
+    <link rel="stylesheet" href="/vendor/katex/katex.min.css">
+    <script src="/vendor/katex/katex.min.js" defer></script>
+    <script src="/math_display.js" defer></script>
+    <script src="/table_export.js" defer></script>
+    <script src="/markdown.js" defer></script>
+    <script type="module" src="/app.js"></script>
+    <script type="module" src="/backups.js"></script>
+  </head>
+  <body class="modern-ui">
+    <a class="skip-link" href="#prompt-input">跳转到消息输入框</a>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="对话导航">
+        <div class="brand-row">
+          <a class="brand" href="/" aria-label="plaude chat 首页">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>
+              <strong>plaude chat</strong>
+              <small>思考、写作与创造</small>
+            </span>
+          </a>
+          <button class="icon-button sidebar-close" id="sidebar-close" type="button" aria-label="关闭侧栏">×</button>
+        </div>
+
+        <button class="new-chat-button" id="new-chat" type="button">
+          <span aria-hidden="true">＋</span>
+          <span>开启新对话</span>
+        </button>
+
+        <div class="history-search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <label class="sr-only" for="history-search">搜索历史对话</label>
+          <input id="history-search" type="search" placeholder="搜索对话" autocomplete="off">
+          <kbd class="history-search-shortcut" aria-hidden="true">Ctrl K</kbd>
+        </div>
+
+        <div class="history-filters" role="group" aria-label="对话范围">
+          <button class="history-filter active" id="history-active-filter" type="button" aria-pressed="true">进行中</button>
+          <button class="history-filter" id="history-archived-filter" type="button" aria-pressed="false">已归档</button>
+        </div>
+
+        <div class="history-heading">
+          <span id="history-heading-title">你的对话</span>
+          <button class="text-button" id="clear-history" type="button" aria-label="归档全部对话并保留记录">归档全部</button>
+        </div>
+        <nav class="history-list" id="history-list" aria-label="最近对话"></nav>
+
+        <div class="sidebar-footer">
+          <button class="text-button" id="open-keyboard-help" type="button">键盘操作说明</button>
+          <div class="sidebar-footer-divider"></div>
+          <div class="service-state">
+            <span class="status-dot" id="status-dot" aria-hidden="true"></span>
+            <span>
+              <strong id="service-status">正在连接本地服务</strong>
+              <small id="service-detail">127.0.0.1</small>
+            </span>
+          </div>
+          <button class="retry-button" id="retry-connection" type="button" hidden>重新连接后端</button>
+        </div>
+      </aside>
+
+      <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <button class="icon-button menu-button" id="menu-button" type="button" aria-label="打开侧栏" aria-controls="sidebar" aria-expanded="false">☰</button>
+          <div class="chat-context">
+            <span class="chat-context-kicker">当前对话</span>
+            <strong id="current-chat-title">新对话</strong>
+          </div>
+          <div class="model-control">
+            <label for="provider-select">服务商</label>
+            <div class="select-wrap">
+              <select id="provider-select" aria-label="选择 AI 服务商" disabled>
+                <option>正在载入…</option>
+              </select>
+              <span aria-hidden="true">⌄</span>
+            </div>
+          </div>
+          <div class="model-id-control">
+            <div class="model-id-label"><label for="model-id-select">具体型号</label><button class="text-button model-picker-trigger" id="open-model-picker" type="button" aria-label="搜索和收藏模型" title="搜索和收藏模型" disabled>⌕ 搜索</button></div>
+            <div class="select-wrap">
+              <select id="model-id-select" aria-label="选择具体型号" disabled>
+                <option>正在载入…</option>
+              </select>
+              <span aria-hidden="true">⌄</span>
+            </div>
+          </div>
+          <button class="model-parameters-button" id="open-model-parameters" type="button" aria-label="调整模型参数">⚙ 参数</button>
+          <div class="workspace-control">
+            <button class="workspace-menu-button" id="workspace-menu-button" type="button" aria-label="工作区设置" title="工作区设置" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-menu">
+              <svg class="workspace-settings-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 7h5m4 0h7M4 17h9m4 0h3M9 4v6m4 4v6"></path>
+                <circle cx="11" cy="7" r="2"></circle>
+                <circle cx="15" cy="17" r="2"></circle>
+              </svg>
+            </button>
+            <div class="workspace-menu" id="workspace-menu" role="menu" aria-label="工作区设置" hidden>
+              <div class="workspace-menu-heading" role="presentation">
+                <strong>工作区设置</strong>
+                <small>集中管理对话工具与本地数据</small>
+              </div>
+
+              <div class="workspace-menu-section" role="group" aria-labelledby="workspace-ai-tools-label">
+                <div class="workspace-menu-section-label" id="workspace-ai-tools-label" role="presentation">AI 工具</div>
+                <label class="workspace-toggle-item" for="web-search-toggle">
+                  <span class="workspace-menu-icon" aria-hidden="true">⌕</span>
+                  <span class="workspace-toggle-copy">
+                    <strong>联网搜索</strong>
+                    <small id="web-search-status">正在检测是否可用</small>
+                  </span>
+                  <input class="workspace-switch" id="web-search-toggle" type="checkbox" role="menuitemcheckbox" aria-describedby="web-search-status" disabled>
+                </label>
+                <button class="workspace-menu-item" id="open-model-directory" type="button" role="menuitem" disabled>
+                  <span class="workspace-menu-icon" aria-hidden="true">☆</span>
+                  <span>模型目录与收藏</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="open-prompt-library" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">▤</span>
+                  <span>提示词库</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="open-conversation-search" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">⌕</span>
+                  <span>查找当前对话</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="open-context-settings" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">↺</span>
+                  <span>上下文管理</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="open-parallel-tasks" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">⇶</span>
+                  <span>并行任务</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="open-instructions" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">✦</span>
+                  <span id="instructions-entry-label">对话设定</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+              </div>
+
+              <div class="workspace-menu-divider" role="separator"></div>
+              <div class="workspace-menu-section" role="group" aria-labelledby="workspace-data-label">
+                <div class="workspace-menu-section-label" id="workspace-data-label" role="presentation">数据与接入</div>
+                <button class="workspace-menu-item" id="open-api-access" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">◇</span>
+                  <span>API 接入</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button class="workspace-menu-item" id="open-shared-conversations" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">◎</span>
+                  <span>公共对话空间</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="export-chat" type="button" role="menuitem" disabled>
+                  <span class="workspace-menu-icon" aria-hidden="true">↓</span>
+                  <span>导出当前对话</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">↗</span>
+                </button>
+                <button class="workspace-menu-item" id="archive-chat" type="button" role="menuitem" disabled>
+                  <span class="workspace-menu-icon" aria-hidden="true">▣</span>
+                  <span id="archive-chat-label">归档当前对话</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="open-backup" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">⇩</span>
+                  <span>备份与导入</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+              </div>
+
+              <div class="workspace-menu-divider" role="separator"></div>
+              <div class="workspace-menu-section" role="group" aria-labelledby="workspace-preferences-label">
+                <div class="workspace-menu-section-label" id="workspace-preferences-label" role="presentation">外观与安全</div>
+                <button class="workspace-menu-item" id="font-toggle" type="button" role="menuitem" aria-label="切换界面字体">
+                  <span class="workspace-menu-icon workspace-menu-font-icon" aria-hidden="true">Aa</span>
+                  <span id="font-toggle-label">字体：默认</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+                <button class="workspace-menu-item" id="open-settings" type="button" role="menuitem">
+                  <span class="workspace-menu-icon" aria-hidden="true">⚙</span>
+                  <span>访问设置</span>
+                  <span class="workspace-menu-arrow" aria-hidden="true">›</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="topbar-note" id="model-note">密钥仅在后端</div>
+          <button class="icon-button delete-chat-button" id="delete-current-chat" type="button" aria-label="删除当前对话" title="删除当前对话">⌫</button>
+        </header>
+
+        <section class="conversation" id="conversation" aria-label="对话内容">
+          <div class="welcome" id="welcome">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> PLAUDE CHAT</div>
+            <h1>今天，想做点什么？</h1>
+            <p>提一个问题，读一份资料，或者一起把想法写出来。</p>
+            <details class="ui-welcome-ideas"><summary>试试这些想法</summary>
+            <div class="suggestion-grid" aria-label="快捷提问">
+              <button class="suggestion-card" type="button" data-prompt="帮我规划一个简洁、有辨识度的个人网站首页，并列出页面结构。">
+                <span class="suggestion-icon peach" aria-hidden="true">✦</span>
+                <span><strong>设计网站</strong><small>规划页面结构与视觉方向</small></span>
+                <span class="arrow" aria-hidden="true">↗</span>
+              </button>
+              <button class="suggestion-card" type="button" data-prompt="请把我的一个模糊想法整理成可以逐步执行的计划。先问我最关键的背景。">
+                <span class="suggestion-icon mint" aria-hidden="true">◎</span>
+                <span><strong>整理灵感</strong><small>把零散想法变成行动计划</small></span>
+                <span class="arrow" aria-hidden="true">↗</span>
+              </button>
+              <button class="suggestion-card" type="button" data-prompt="帮我写一段自然、真诚、有画面感的中文介绍文案。先询问用途和读者。">
+                <span class="suggestion-icon lilac" aria-hidden="true">文</span>
+                <span><strong>打磨文案</strong><small>写出自然清晰的中文表达</small></span>
+                <span class="arrow" aria-hidden="true">↗</span>
+              </button>
+              <button class="suggestion-card" type="button" data-prompt="和我一起排查一个程序问题。请先让我描述现象、环境和已经尝试的方法。">
+                <span class="suggestion-icon blue" aria-hidden="true">⌁</span>
+                <span><strong>解决问题</strong><small>分析代码与技术故障</small></span>
+                <span class="arrow" aria-hidden="true">↗</span>
+              </button>
+            </div>
+            </details>
+          </div>
+          <div class="messages" id="messages" role="log" aria-label="对话消息"></div>
+        </section>
+
+        <div class="composer-area">
+          <button class="jump-latest" id="jump-latest" type="button" hidden aria-label="跳转到最新消息">↓ 最新消息</button>
+          <div class="composer-topline">
+            <span class="composer-topline-label"><span class="composer-topline-dot"></span>对话工作台</span>
+            <span id="context-summary" class="context-summary"></span>
+            <span id="usage-summary" class="usage-summary" aria-live="polite"></span>
+          </div>
+          <form class="composer" id="composer">
+            <p id="conversation-activity" class="vision-model-hint" aria-live="polite" hidden></p>
+            <label class="sr-only" for="prompt-input">输入消息</label>
+            <textarea id="prompt-input" rows="1" maxlength="12000" placeholder="向 AI 提问，或写下你的想法…" autocomplete="off" aria-describedby="input-keyboard-help"></textarea>
+            <span class="sr-only" id="input-keyboard-help">默认 Enter 发送，Shift + Enter 换行。设置中心可改为 Ctrl 或 Command + Enter 发送。输入法选字时不会发送。</span>
+            <input id="text-file-input" type="file" accept=".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp" multiple hidden>
+            <div class="composer-actions">
+              <span class="composer-hint">Enter 发送 · Shift + Enter 换行</span>
+              <div class="composer-action-buttons">
+                <label class="sr-only" for="voice-language">语音识别语言</label>
+                <select id="voice-language" class="voice-language" aria-label="语音识别语言"><option value="zh-CN">中文</option><option value="en-US">English</option></select>
+                <button class="attach-text-button" id="voice-input" type="button" aria-pressed="false" title="语音输入">语音输入</button>
+                <button class="attach-text-button" id="attach-text-button" type="button" title="读取文本、PDF、Word 或图片文字，检查后发送">＋ 文件</button>
+                <button class="send-button" id="send-button" type="submit" disabled aria-label="发送消息">
+                  <span id="send-icon" aria-hidden="true">↑</span>
+                </button>
+              </div>
+            </div>
+            <p id="voice-status" class="voice-status" role="status"></p>
+            <details class="voice-help"><summary>语音输入说明</summary><p>仅点击后使用麦克风，最长听写 2 分钟。浏览器可能把音频发送给其语音服务处理；本站不保存录音。支持情况和网络要求由浏览器决定。文字先进入草稿，请核对后发送。</p></details>
+          </form>
+          <p class="fine-print">AI 可能会出错，请核对重要信息 · 登录后可使用个人私有空间</p>
+        </div>
+
+      </main>
+    </div>
+
+    <div class="sr-only" id="live-status" aria-live="polite" aria-atomic="true"></div>
+    <div class="toast" id="toast" role="status" aria-live="assertive"></div>
+
+    <dialog class="settings-dialog conversation-search-dialog" id="model-picker-dialog" aria-labelledby="model-picker-title">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><span class="dialog-kicker">MODEL DIRECTORY</span><h2 id="model-picker-title">选择具体型号</h2></div>
+          <button class="icon-button" id="close-model-picker" type="button" aria-label="关闭模型目录">×</button>
+        </div>
+        <p id="model-picker-provider"></p>
+        <label class="sr-only" for="model-picker-input">搜索模型名称或 ID</label>
+        <input class="model-picker-input" id="model-picker-input" type="search" maxlength="200" placeholder="搜索名称或模型 ID…" autocomplete="off">
+        <label class="model-favorites-filter"><input id="model-picker-favorites" type="checkbox"> 只看收藏</label>
+        <p id="model-picker-status" role="status"></p>
+        <div class="conversation-search-results" id="model-picker-results"></div>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog conversation-search-dialog" id="conversation-search-dialog" aria-labelledby="conversation-search-title">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><span class="dialog-kicker">FIND IN CHAT</span><h2 id="conversation-search-title">查找当前对话</h2></div>
+          <button class="icon-button" id="close-conversation-search" type="button" aria-label="关闭对话查找">×</button>
+        </div>
+        <p>按关键字查找问题与回复，点击结果跳转到对应消息。快捷键 Ctrl / Cmd + Shift + F。</p>
+        <div class="conversation-search-controls">
+          <label class="sr-only" for="conversation-search-input">查找关键字</label>
+          <input id="conversation-search-input" type="search" maxlength="200" placeholder="输入关键字…" autocomplete="off">
+          <label class="sr-only" for="conversation-search-role">消息范围</label>
+          <select id="conversation-search-role"><option value="all">全部消息</option><option value="user">我的提问</option><option value="assistant">AI 回复</option></select>
+        </div>
+        <p id="conversation-search-status" role="status"></p>
+        <div class="conversation-search-results" id="conversation-search-results"></div>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog" id="context-settings-dialog" aria-labelledby="context-settings-title">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div><span class="dialog-kicker">CONVERSATION MEMORY</span><h2 id="context-settings-title">上下文管理</h2></div>
+          <button class="icon-button" id="close-context-settings" type="button" aria-label="关闭上下文管理">×</button>
+        </div>
+        <p>选择每次提问附带多少轮历史。上下文越少，通常用量越低；模型也会少记一些之前的内容。</p>
+        <label class="token-label" for="context-history-turns">携带的历史轮数</label>
+        <select id="context-history-turns">
+          <option value="auto">自动（按长度选择最近的完整对话）</option>
+          <option value="0">不携带历史，只发送本次问题</option>
+          <option value="2">最近 2 轮</option><option value="4">最近 4 轮</option>
+          <option value="6">最近 6 轮</option><option value="8">最近 8 轮</option><option value="10">最近 10 轮</option>
+        </select>
+        <p id="context-settings-status" role="status"></p>
+        <label class="memory-context-option"><input type="checkbox" id="context-use-memory" checked> 本对话使用账户长期记忆（访客不使用）</label>
+        <h3>按当前草稿预览</h3><p id="context-budget-detail" class="context-budget-detail"></p><p class="context-help">预览采用弹窗当前轮数选项，保存后生效。项目采用当前已载入资料，发送时重新读取后可能变化；预览不会请求模型。</p><p id="context-last-request" class="context-budget-detail" hidden></p>
+        <div class="context-boundary-actions">
+          <button class="secondary-button" id="reset-chat-context" type="button">从现在开始新上下文</button>
+          <button class="text-button" id="restore-chat-context" type="button">重新允许引用之前的历史</button>
+        </div>
+        <p class="context-help">开始新上下文后，旧消息仍保留在页面与备份里，但后续请求不再携带它们。对话设定仍会发送。</p>
+        <div class="dialog-actions"><button class="primary-button" id="save-context-settings" type="button">保存到当前对话</button></div>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog" id="settings-dialog" aria-labelledby="settings-title" aria-describedby="settings-description">
+      <form method="dialog" class="dialog-card" id="settings-form">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">PRIVATE ACCESS</span>
+            <h2 id="settings-title">网站访问口令</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="submit" aria-label="关闭设置">×</button>
+        </div>
+        <p id="settings-description">输入一次后会保存在当前浏览器，网站更新或重启浏览器后仍可使用。公用设备用完后请移除口令。</p>
+        <label class="token-label" for="gateway-token">访问口令</label>
+        <input id="gateway-token" name="gateway-token" type="password" autocomplete="off" placeholder="输入服务器访问口令">
+        <div class="dialog-actions">
+          <button class="secondary-button" id="remove-token" type="button">退出并清除口令</button>
+          <button class="primary-button" id="save-token" value="default" type="submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="settings-dialog api-dialog" id="api-dialog" aria-labelledby="api-title" aria-describedby="api-description">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">API ACCESS</span>
+            <h2 id="api-title">在其他应用中调用</h2>
+          </div>
+          <button class="icon-button" id="close-api-access" type="button" aria-label="关闭 API 接入">×</button>
+        </div>
+        <p id="api-description">使用网站访问口令作为 API Key。这里的密钥由本站验证，模型请求仍受服务器的限流和每日软额度限制。</p>
+        <div class="api-setting">
+          <span class="token-label">Base URL</span>
+          <div class="api-value-row"><code id="api-base-url"></code><button class="secondary-button" id="copy-api-base-url" type="button">复制</button></div>
+        </div>
+        <div class="api-setting">
+          <label class="token-label" for="api-model-id">模型 ID</label>
+          <div class="api-value-row"><select id="api-model-id" aria-label="选择 API 模型"></select><button class="secondary-button" id="copy-api-model-id" type="button">复制</button></div>
+        </div>
+        <div class="api-setting">
+          <span class="token-label">API Key</span>
+          <p class="api-help" id="api-key-help"></p>
+        </div>
+        <p class="api-help">Gemini 需要另行在服务器配置 Google AI Studio API Key；Google AI Pro 订阅额度不适用于此接口。</p>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog instructions-dialog" id="instructions-dialog" aria-labelledby="instructions-title" aria-describedby="instructions-description">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">CHAT PRESETS</span>
+            <h2 id="instructions-title">对话设定</h2>
+          </div>
+          <button class="icon-button" id="close-instructions" type="button" aria-label="关闭对话设定">×</button>
+        </div>
+        <p id="instructions-description">为当前对话选择或编写回答方式，应用后从下一次提问开始生效。我的预设只保存在此浏览器。</p>
+        <label class="token-label" for="preset-select">选择预设</label>
+        <select id="preset-select" aria-label="选择对话预设"></select>
+        <label class="token-label" for="instructions-input">回答方式</label>
+        <textarea id="instructions-input" rows="6" maxlength="2000" placeholder="例如：请用简洁的中文回答，先给结论，再说明原因。"></textarea>
+        <div class="preset-save-row">
+          <label class="sr-only" for="preset-name">新预设名称</label>
+          <input id="preset-name" maxlength="40" placeholder="给新预设起个名字" autocomplete="off">
+          <button class="secondary-button" id="save-preset" type="button">保存为预设</button>
+        </div>
+        <div class="dialog-actions">
+          <button class="secondary-button" id="delete-preset" type="button" disabled>删除所选预设</button>
+          <button class="secondary-button" id="update-preset" type="button" disabled>更新所选预设</button>
+          <button class="primary-button" id="apply-instructions" type="button">应用到当前对话</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog backup-dialog" id="backup-dialog" aria-labelledby="backup-title" aria-describedby="backup-description">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">LOCAL BACKUP</span>
+            <h2 id="backup-title">备份与导入</h2>
+          </div>
+          <button class="icon-button" id="close-backup" type="button" aria-label="关闭备份窗口">×</button>
+        </div>
+        <p id="backup-description">把当前浏览器中的对话、上下文设置、自建预设、提示词库和模型收藏保存为 JSON 文件。备份不包含网站访问口令；导入时会合并新记录，已有记录不会被覆盖。</p>
+        <button class="secondary-button" id="backup-export" type="button">下载完整备份</button>
+        <label class="token-label backup-file-label" for="backup-file">导入已有备份</label>
+        <input id="backup-file" type="file" accept=".json,application/json">
+        <div class="dialog-actions">
+          <button class="primary-button" id="backup-import" type="button">导入并合并</button>
+        </div>
+        <p class="backup-status" id="backup-status" role="status" aria-live="polite"></p>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog prompt-library-dialog" id="prompt-library-dialog" aria-labelledby="prompt-library-title" aria-describedby="prompt-library-description">
+      <div class="dialog-card prompt-library-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">PROMPT LIBRARY</span>
+            <h2 id="prompt-library-title">提示词库</h2>
+          </div>
+          <button class="icon-button" id="close-prompt-library" type="button" aria-label="关闭提示词库">×</button>
+        </div>
+        <p id="prompt-library-description">保存经常使用的提问，选择后可插入当前输入框。登录后可私有云同步；旧本机库须明确迁移。插入只影响当前聊天草稿，不会自动发送。</p>
+        <div class="prompt-library-transfer">
+          <span id="prompt-cloud-status" role="status" aria-live="polite">未登录 · 提示词仅保存本机</span>
+          <button class="text-button" id="prompt-cloud-sync" type="button" hidden>同步云端</button>
+          <button class="text-button" id="prompt-cloud-migrate" type="button" hidden>迁移旧本机库</button>
+          <button class="text-button" id="prompt-cloud-use" type="button" hidden>读取云端库</button>
+          <button class="text-button" id="prompt-cloud-resolve" type="button" hidden>合并冲突副本</button>
+        </div>
+        <div class="prompt-library-tools">
+          <label class="sr-only" for="prompt-library-search">搜索提示词</label>
+          <input id="prompt-library-search" type="search" placeholder="搜索标题或内容" autocomplete="off">
+          <label class="sr-only" for="prompt-library-order">提示词排序</label>
+          <select id="prompt-library-order" aria-label="提示词排序">
+            <option value="recent">最近修改</option>
+            <option value="title">按标题</option>
+            <option value="oldest">最早修改</option>
+          </select>
+          <button class="secondary-button" id="new-library-prompt" type="button">＋ 新建</button>
+        </div>
+        <div class="prompt-library-layout">
+          <div class="prompt-library-list" id="prompt-library-list" role="group" aria-label="常用提示词"></div>
+          <div class="prompt-library-editor">
+            <label class="token-label" for="library-prompt-title">标题</label>
+            <input id="library-prompt-title" maxlength="50" placeholder="例如：整理会议记录" autocomplete="off">
+            <label class="token-label" for="library-prompt-content">提示词内容</label>
+            <textarea id="library-prompt-content" rows="9" maxlength="6000" placeholder="写下要重复使用的完整提示词…"></textarea>
+            <div class="dialog-actions prompt-editor-actions">
+              <button class="secondary-button" id="delete-library-prompt" type="button" disabled>删除</button>
+              <button class="secondary-button" id="save-library-prompt" type="button">保存</button>
+              <button class="primary-button" id="insert-library-prompt" type="button">插入输入框</button>
+            </div>
+          </div>
+        </div>
+        <div class="prompt-library-transfer">
+          <button class="text-button" id="export-prompt-library" type="button">导出提示词</button>
+          <button class="text-button prompt-library-import-label" id="import-prompt-library" type="button">导入提示词</button>
+          <input id="import-prompt-library-file" type="file" accept=".json,application/json" hidden>
+          <span id="prompt-library-status" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog parallel-tasks-dialog" id="parallel-tasks-dialog" aria-labelledby="parallel-tasks-title" aria-describedby="parallel-tasks-description">
+      <div class="dialog-card parallel-tasks-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">PARALLEL TASKS</span>
+            <h2 id="parallel-tasks-title">同时进行多条对话任务</h2>
+          </div>
+          <button class="icon-button" id="close-parallel-tasks" type="button" aria-label="关闭并行任务">×</button>
+        </div>
+        <p id="parallel-tasks-description">每行填写一个独立任务，最多 6 条。任务会使用当前服务商和型号创建独立对话，同时运行 2 条，其余自动排队。</p>
+        <label class="token-label" for="parallel-task-input">任务列表</label>
+        <textarea id="parallel-task-input" rows="8" maxlength="12000" placeholder="整理一份本周工作计划&#10;写一段产品介绍&#10;解释这段代码可能的问题"></textarea>
+        <div class="parallel-task-summary" id="parallel-task-summary" role="status" aria-live="polite">尚未启动任务</div>
+        <div class="parallel-task-results" id="parallel-task-results"></div>
+        <div class="dialog-actions">
+          <button class="secondary-button" id="clear-parallel-tasks" type="button">清空</button>
+          <button class="primary-button" id="start-parallel-tasks" type="button">开始并行任务</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog shared-conversations-dialog" id="shared-conversations-dialog" aria-labelledby="shared-conversations-title" aria-describedby="shared-conversations-description">
+      <div class="dialog-card shared-conversations-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">PUBLIC CONVERSATIONS</span>
+            <h2 id="shared-conversations-title">公共对话空间</h2>
+          </div>
+          <button class="icon-button" id="close-shared-conversations" type="button" aria-label="关闭公共对话空间">×</button>
+        </div>
+        <p class="shared-warning" id="shared-conversations-description"><strong>这里是旧公共空间，拥有网站访问权限的人可以看到其中的记录。</strong>新聊天不再自动公开。登录后请在个人私有空间聊天；旧公开内容不会自动撤回。</p>
+        <div class="shared-toolbar">
+          <label class="token-label" for="shared-author-name">公开昵称</label>
+          <input id="shared-author-name" maxlength="30" placeholder="匿名访客" autocomplete="nickname">
+          <div class="shared-toolbar-actions">
+            <button class="secondary-button" id="refresh-shared-conversations" type="button">刷新</button>
+            <button class="secondary-button" id="publish-current-conversation" type="button">保存当前对话</button>
+            <button class="primary-button" id="publish-all-conversations" type="button">同步全部本地对话</button>
+          </div>
+        </div>
+        <p class="shared-status" id="shared-conversations-status" role="status" aria-live="polite"></p>
+        <div class="shared-conversations-list" id="shared-conversations-list"></div>
+      </div>
+    </dialog>
+
+    <dialog class="settings-dialog model-parameters-dialog" id="model-parameters-dialog" aria-labelledby="model-parameters-title" aria-describedby="model-parameters-description">
+      <div class="dialog-card">
+        <div class="dialog-heading">
+          <div>
+            <span class="dialog-kicker">MODEL SETTINGS</span>
+            <h2 id="model-parameters-title">模型参数</h2>
+          </div>
+          <button class="icon-button" id="close-model-parameters" type="button" aria-label="关闭模型参数">×</button>
+        </div>
+        <p id="model-parameters-description">仅用于当前对话。勾选需要调整的项目，未勾选时使用模型默认值。</p>
+        <div class="parameter-row" id="temperature-row">
+          <label for="parameter-temperature-enabled"><input id="parameter-temperature-enabled" type="checkbox"> 调整随机度</label>
+          <input id="parameter-temperature" type="number" min="0" max="2" step="0.1" inputmode="decimal" aria-label="随机度，0 到 2" disabled>
+          <small>数值越高，回复越有变化；0 更稳定。</small>
+        </div>
+        <div class="parameter-row" id="top-p-row">
+          <label for="parameter-top-p-enabled"><input id="parameter-top-p-enabled" type="checkbox"> 调整候选范围</label>
+          <input id="parameter-top-p" type="number" min="0.01" max="1" step="0.01" inputmode="decimal" aria-label="候选范围，0.01 到 1" disabled>
+          <small>控制模型从多大范围挑选下一个词。</small>
+        </div>
+        <div class="parameter-row" id="max-output-row">
+          <label for="parameter-max-output-enabled"><input id="parameter-max-output-enabled" type="checkbox"> 自定义输出上限</label>
+          <input id="parameter-max-output" type="number" min="1" step="1" inputmode="numeric" aria-label="单次回复 Token 上限" disabled>
+          <button class="text-button" id="parameter-max-output-maximum" type="button">使用最大值</button>
+          <small id="parameter-max-output-hint">取消勾选使用模型默认值。</small>
+        </div>
+        <p class="parameter-help" id="parameter-help"></p>
+        <div class="dialog-actions parameter-actions">
+          <button class="secondary-button" id="reset-model-parameters" type="button">恢复默认</button>
+          <button class="primary-button" id="save-model-parameters" type="button">应用到当前对话</button>
+        </div>
+      </div>
+    </dialog>
+    <dialog class="settings-dialog" id="keyboard-help-dialog" aria-labelledby="keyboard-help-title">
+      <div class="dialog-card">
+        <div class="dialog-heading"><h2 id="keyboard-help-title">键盘操作说明</h2><button class="icon-button" id="close-keyboard-help" type="button" aria-label="关闭键盘操作说明">×</button></div>
+        <ul class="keyboard-help-list">
+          <li>Tab / Shift + Tab：依次移动焦点；Enter 或空格：操作按钮。</li>
+          <li>Ctrl / Command + K：搜索对话、项目、资料与文稿；Ctrl / Command + Shift + F：查找当前对话。</li>
+          <li>Ctrl / Command + Shift + O：开启新对话，当前草稿保留。</li>
+          <li>默认 Enter 发送、Shift + Enter 换行；设置中心可改为 Ctrl / Command + Enter 发送。输入法选字不会发送。</li>
+          <li>Esc：关闭弹窗或手机侧栏，焦点返回入口；手机工具中的弹窗关闭后返回“工具”。</li>
+          <li>网页开头的“跳转到消息输入框”可以跳过导航。手机可用“工具”访问模型与设置。</li>
+        </ul>
+      </div>
+    </dialog>
+  </body>
+</html>

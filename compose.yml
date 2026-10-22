@@ -1,0 +1,27 @@
+name: plaude-chat
+services:
+  backend:
+    build: .
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    mem_limit: 384m
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      BIND_HOST: 0.0.0.0
+      LOCAL_DEV_NO_AUTH: "0"
+      TRUST_PROXY: "1"
+      MAX_OUTPUT_TOKENS: ${MAX_OUTPUT_TOKENS:-0}
+      SHARED_CONVERSATIONS_FILE: /var/lib/plaude-chat/shared-conversations.json
+    volumes:
+      - ./secrets:/app/secrets:ro
+      - chat-state:/var/lib/plaude-chat
+volumes:
+  chat-state:
