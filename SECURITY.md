@@ -13,3 +13,7 @@ The optional code runner is a separate Linux process with pinned images, a priva
 ## Deployment
 
 Use HTTPS, disable local no-auth mode in production, restrict backend ingress and review reverse-proxy trust. Back up the complete private state directory and encryption keys privately. This source release does not include production infrastructure or credentials.
+
+## Known dependency advisory
+
+An npm audit on 2026-10-22 reports one moderate-severity advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), propagated through `mammoth` → `argparse` → `sprintf-js` (three affected package entries). It concerns unbounded precision in formatting strings. Application-level reachability has not been established. The audit tool proposes a major rollback of `mammoth`; that rollback has not been applied. Do not treat passing tests as a clean security audit.
