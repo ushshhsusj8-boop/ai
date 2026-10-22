@@ -5,6 +5,7 @@ export function normalizeContextSettings(value) {
     resetAt: Number.isSafeInteger(value?.resetAt) && value.resetAt >= 0 && value.resetAt <= Date.now()
       ? value.resetAt : null,
     ...(value?.useMemory===false?{useMemory:false}:{}),
+    ...(value?.usePersonalInstructions===false?{usePersonalInstructions:false}:{}),
   };
 }
 

@@ -81,7 +81,8 @@ function validateParameters(value) {
 
 function validateContext(value) {
   if (value === undefined) return normalizeContextSettings();
-  knownFields(value, ["historyTurns", "resetAt", "useMemory"], "上下文设置");
+  knownFields(value, ["historyTurns", "resetAt", "useMemory", "usePersonalInstructions"], "上下文设置");
+  if(value.usePersonalInstructions!==undefined&&typeof value.usePersonalInstructions!=='boolean')fail('通用指令使用开关无效。');
   if(value.useMemory!==undefined&&typeof value.useMemory!=='boolean')fail('记忆使用开关无效。');
   if (value.historyTurns !== undefined && value.historyTurns !== null
     && (!Number.isInteger(value.historyTurns) || value.historyTurns < 0 || value.historyTurns > 10)) {

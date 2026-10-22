@@ -16,6 +16,7 @@ import { initWritingDesk } from './writing_desk.js';
 import { historyBucket,historyPage } from './ui_state.js';
 import {prepareChatContext,formatContextReport} from './context_budget.js';
 import {initAccountMemory} from './account_memory.js';
+import {initPersonalInstructions} from './personal_instructions.js';
 "use strict";
 
 import { initWorkspace, workspacePreferences } from "./workspace.js";
@@ -34,6 +35,7 @@ let workbench;
 let visionComposer;
 let voiceComposer;
 let accountMemory;
+let personalInstructions;
 let privateSync;
 let accountUI;
 let modernUI;
@@ -1567,10 +1569,11 @@ function updateContextPreview() {
   if(busy){detail.textContent='当前对话正在生成；结束后可查看下一次发送预览。';return;}
   try {
     const images=visionComposer?.images()||[],content=elements.promptInput.value.trim()||(images.length?'请描述并分析图片内容。':''),settings={...normalizeContextSettings(conversation?.context)};
-    if(elements.contextSettingsDialog.open){const value=elements.contextHistoryTurns.value;settings.historyTurns=value==='auto'?null:Number(value);if(document.querySelector('#context-use-memory').checked)delete settings.useMemory;else settings.useMemory=false;}
+    if(elements.contextSettingsDialog.open){const value=elements.contextHistoryTurns.value;settings.historyTurns=value==='auto'?null:Number(value);if(document.querySelector('#context-use-memory').checked)delete settings.useMemory;else settings.useMemory=false;if(document.querySelector('#context-use-personal').checked)delete settings.usePersonalInstructions;else settings.usePersonalInstructions=false;}
+    const personal=personalInstructions?.preview(settings.usePersonalInstructions!==false)||{chars:0,loaded:false};
     const memory=settings.useMemory===false?{entries:[],chars:0}:accountMemory?.preview(settings.useMemory!==false)||{entries:[],chars:0};
-    const {report}=prepareChatContext([...(conversation?.messages||[]),{role:'user',content,images}],settings,{...state.contextLimits,...previewProjectInput(conversation),historyBudget:API_CHAR_BUDGET,maxMessages:API_MESSAGE_LIMIT,memoryChars:memory.chars,memoryCount:memory.entries.length});
-    detail.textContent=formatContextReport(report)+(accountUser&&memory.loaded===false?'\n长期记忆尚未读取，请打开“长期记忆”核对；发送时会重新读取。':'');
+    const {report}=prepareChatContext([...(conversation?.messages||[]),{role:'user',content,images}],settings,{...state.contextLimits,...previewProjectInput(conversation),historyBudget:API_CHAR_BUDGET,maxMessages:API_MESSAGE_LIMIT,memoryChars:memory.chars,memoryCount:memory.entries.length,personalChars:personal.chars});
+    detail.textContent=formatContextReport(report)+(accountUser&&settings.usePersonalInstructions!==false&&!personal.loaded?'\n账户通用指令尚未读取，可在设置中查看；发送时会读取。':'')+(accountUser&&memory.loaded===false?'\n长期记忆尚未读取，请打开“长期记忆”核对；发送时会重新读取。':'');
     elements.contextSummary.textContent=`下次 ${report.historyTurns} 轮${report.omittedMessages?` · 省略 ${report.omittedMessages} 条`:''}`;elements.contextSummary.title=detail.textContent;
   }catch(e){detail.textContent=e.message;elements.contextSummary.textContent='上下文需检查';elements.contextSummary.title=e.message;}
   const previous=state.contextReports.get(conversation?.id);last.hidden=!previous;if(previous)last.textContent='上次准备发送的范围（未证明服务器已收到）：\n'+formatContextReport(previous);
@@ -1751,6 +1754,7 @@ function openContextSettings() {
   const context = normalizeContextSettings(conversation.context);
   elements.contextHistoryTurns.value = context.historyTurns === null ? "auto" : String(context.historyTurns);
   document.querySelector('#context-use-memory').checked=context.useMemory!==false;
+  document.querySelector('#context-use-personal').checked=context.usePersonalInstructions!==false;
   elements.restoreChatContext.disabled = context.resetAt === null;
   elements.contextSettingsStatus.textContent = context.resetAt === null
     ? "当前可引用完整历史，实际携带量受所选轮数和长度限制。"
@@ -1761,6 +1765,7 @@ function openContextSettings() {
 }
 elements.contextHistoryTurns.addEventListener('change',updateContextPreview);
 document.querySelector('#context-use-memory').addEventListener('change',updateContextPreview);
+document.querySelector('#context-use-personal').addEventListener('change',updateContextPreview);
 elements.contextSettingsDialog.addEventListener('close',updateContextPreview);
 
 function saveContextSettings(mode = "save") {
@@ -1770,6 +1775,7 @@ function saveContextSettings(mode = "save") {
   const value = elements.contextHistoryTurns.value;
   context.historyTurns = value === "auto" ? null : Number(value);
   if(document.querySelector('#context-use-memory').checked)delete context.useMemory;else context.useMemory=false;
+  if(document.querySelector('#context-use-personal').checked)delete context.usePersonalInstructions;else context.usePersonalInstructions=false;
   if (mode === "reset") context.resetAt = Date.now();
   if (mode === "restore") context.resetAt = null;
   conversation.context = normalizeContextSettings(context);
@@ -2465,6 +2471,7 @@ async function requestConversation(conversation, userMessage, replacementAssista
 
   try {
     const projectInput = await projects.context(conversation);
+    const personal=await personalInstructions.prepare({enabled:conversation.context?.usePersonalInstructions!==false,signal:controller.signal});
     const memory=await accountMemory.prepare(userMessage.content,{enabled:conversation.context?.useMemory!==false,signal:controller.signal});
     releaseSlot = await requestQueue.acquire(controller.signal);
     if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -2477,7 +2484,7 @@ async function requestConversation(conversation, userMessage, replacementAssista
     }
     if (gatewayToken && !accountUser) headers.authorization = `Bearer ${gatewayToken}`;
 
-    const prepared=prepareChatContext(replacementAssistant?conversation.messages.slice(0,-1):conversation.messages,conversation.context,{...state.contextLimits,...projectInput,maxMessages:API_MESSAGE_LIMIT,historyBudget:API_CHAR_BUDGET,memoryChars:memory.chars,memoryCount:memory.entries.length});
+    const prepared=prepareChatContext(replacementAssistant?conversation.messages.slice(0,-1):conversation.messages,conversation.context,{...state.contextLimits,...projectInput,maxMessages:API_MESSAGE_LIMIT,historyBudget:API_CHAR_BUDGET,memoryChars:memory.chars,memoryCount:memory.entries.length,personalChars:personal.chars});
     state.contextReports.set(conversation.id,prepared.report);
     accountMemory.record(conversation.id,memory.entries);
     const response = await fetchQueuedChat("/api/chat", {
@@ -2496,6 +2503,7 @@ async function requestConversation(conversation, userMessage, replacementAssista
           && providerSupportsWebSearch(state.providers.find((item) => item.id === conversation.provider)),
         instructions: projectInput.instructions,
         ...(memory.selection?{memory:memory.selection}:{}),
+        ...(personal.selection?{personalInstructions:personal.selection}:{}),
         documents: projectInput.documents,
         messages: prepared.messages,
       }),
@@ -3537,7 +3545,7 @@ restoreDraft(activeConversation());
 const chatLayout = initMobileLayout();
 initAccessibility();
 accountUI = initAccountUI({
-  busy: () => Boolean(accountMemory?.busy()) || state.backgroundRequests.size > 0 || Boolean(document.querySelector('#code-stop:not(:disabled)')) || Boolean(document.querySelector('#attachment-review[open] #attachment-insert:disabled')) || Boolean(document.querySelector('#project-dialog[open] button:disabled')),
+  busy: () => Boolean(personalInstructions?.busy()) || Boolean(accountMemory?.busy()) || state.backgroundRequests.size > 0 || Boolean(document.querySelector('#code-stop:not(:disabled)')) || Boolean(document.querySelector('#attachment-review[open] #attachment-insert:disabled')) || Boolean(document.querySelector('#project-dialog[open] button:disabled')),
   beforeChange: () => {
     const draftSaved = saveDraft();
     if (!draftSaved && elements.promptInput.value.trim()) {
@@ -3592,6 +3600,7 @@ document.querySelector('.fine-print').textContent = accountUser ? 'AI 可能出�
 writingDesk=initWritingDesk({toast:showToast,userId:accountUser?.id||null,onIdentityChanged:identityChanged,insert:text=>{if(state.busy){showToast('请等待当前回复完成后插入文稿。');return;}try{elements.promptInput.value=appendDraftText(elements.promptInput.value,text,elements.promptInput.maxLength);saveDraft();resizeTextarea();updateSendState();showToast('已放入当前聊天草稿，请核对后发送。');}catch(e){showToast(e.message);}}});
 modernUI=initModernUI({conversations:()=>state.conversations,active:activeConversation,select:selectConversation,create:createConversation,projects,notes:()=>writingDesk.notes(),openNote:(...args)=>writingDesk.open(...args),openWorkspace:()=>workspace.open(),openModels:origin=>chatLayout.open('models',origin),busy:()=>state.backgroundRequests.size>0,closeSidebar:()=>closeSidebar(false),toast:showToast});
 branchNavigation=initBranchNavigation({conversations:()=>state.conversations,active:activeConversation,select:selectConversation,toast:showToast});
+personalInstructions=initPersonalInstructions({user:accountUser,currentUser:()=>accountUser,identityChanged,changed:updateContextPreview,toast:showToast});
 accountMemory=initAccountMemory({user:accountUser,currentUser:()=>accountUser,identityChanged,toast:showToast,changed:updateContextPreview,active:activeConversation});
 void loadProviders();
 window.setInterval(() => {

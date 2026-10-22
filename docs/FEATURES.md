@@ -6,6 +6,10 @@ Each conversation has its own instructions, provider/model parameters, context p
 
 Streaming retains received text after stopping or disconnecting. A retry is explicit. Queued generation is isolated by conversation; settings control concurrency. Input context has a budget, and long documents are searched for relevant fragments rather than guaranteed to be read completely in one request.
 
+## Account-wide instructions
+
+Use 设置 → 账户通用指令 to save default response preferences (up to 2,000 characters) for this account. Each conversation can opt out in 上下文范围. The server resolves the authenticated account and revision; a stale version is rejected before model access. Instructions are included in the input budget. Failed reads preserve the question; conflicting writes preserve the draft. Specific project, conversation and user requests take precedence over these defaults. Clearing and saving removes the text; pausing retains it. Conversation JSON contains only the opt-out switch; copy instruction text separately or privately back up the complete server state.
+
 ## Accounts and explicit memory
 
 Accounts separate private conversations, projects and other cloud data. Legacy shared conversation support is separate and never makes a new private account conversation public automatically.

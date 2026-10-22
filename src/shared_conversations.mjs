@@ -100,6 +100,7 @@ export function normalizeConversation(value, now = Date.now(), { allowEmpty = fa
         && value.context.historyTurns <= 10 ? value.context.historyTurns : null,
       resetAt: Number.isSafeInteger(value.context?.resetAt) ? value.context.resetAt : null,
       ...(value.context?.useMemory===false?{useMemory:false}:{}),
+      ...(value.context?.usePersonalInstructions===false?{usePersonalInstructions:false}:{}),
     },
     createdAt,
     updatedAt: Math.max(createdAt, validTime(value.updatedAt, now)),

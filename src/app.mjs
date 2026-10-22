@@ -18,6 +18,7 @@ const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const STATIC_FILES = new Map([
   ["/memory_tools.js", ["../public/memory_tools.js", "text/javascript; charset=utf-8"]],
+  ["/personal_instructions.js", ["../public/personal_instructions.js", "text/javascript; charset=utf-8"]],
   ["/account_memory.js", ["../public/account_memory.js", "text/javascript; charset=utf-8"]],
   ["/account.js", ["../public/account.js", "text/javascript; charset=utf-8"]],
   ["/private_sync.js", ["../public/private_sync.js", "text/javascript; charset=utf-8"]],
@@ -647,13 +648,19 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
     try {
       const body = await readJson(request, Math.max(config.maxBodyBytes, 4 * 1024 * 1024));
       const instructions = validateChatInstructions(body?.instructions);
+      let personalContext='';
+      if(body?.personalInstructions!==undefined){
+        const owner=validAccount(request)?.user?.id;
+        if(!owner)throw Object.assign(Error('通用指令仅可由当前登录账户使用。'),{statusCode:403});
+        personalContext=accountStore.resolveInstructions(owner,body.personalInstructions);
+      }
       let memoryContext='';
       if(body?.memory!==undefined){
         const owner=validAccount(request)?.user?.id;
         if(!owner)throw Object.assign(Error('长期记忆仅可由当前登录账户使用。'),{statusCode:403});
         memoryContext=accountStore.resolveMemories(owner,body.memory).text;
       }
-      const messages = validateMessages(body?.messages, config.maxInputChars, instructions.length+memoryContext.length);
+      const messages = validateMessages(body?.messages, config.maxInputChars, instructions.length+memoryContext.length+personalContext.length);
       const documents = validateDocuments(body?.documents);
       const documentBytes = body?.documents ? Buffer.byteLength(JSON.stringify(documents)) : 0;
       const imageBytes = messages.reduce((total, m) => total + (m.images || []).reduce((n, image) => n + image.dataUrl.length, 0), 0);
@@ -674,7 +681,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
       const webSearch = validateWebSearch(body?.webSearch, selectedProvider, config);
       if (webSearch && documents.some(doc => doc.enabled)) throw Error('资料阅读暂不同时联网搜索，请先关闭联网或暂停资料引用。');
       const documentResult = retrieveDocuments(documents, messages.at(-1).content,
-        config.maxInputChars - instructions.length - memoryContext.length - messages.reduce((sum, message) => sum + message.content.length, 0));
+        config.maxInputChars - instructions.length - memoryContext.length - personalContext.length - messages.reduce((sum, message) => sum + message.content.length, 0));
       recordActivity('chat_started', `${selectedProvider.id} / ${selectedModel} · ${messages.length} 条上下文${hasImages ? ' · 图片理解' : ''}`, requestId, ownerOf(request));
       if (documentResult) recordActivity('documents', `资料${documentResult.context.mode === 'overview' ? '抽样' : '检索'} · ${documentResult.context.sources.length} 个片段`, requestId, ownerOf(request));
       if (webSearch) recordActivity('search', '开始联网搜索', requestId, ownerOf(request));
@@ -734,7 +741,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
       }
       const requestConfig = {
         ...config,
-        systemPrompt: (instructions ? `${config.systemPrompt}\n\n${instructions}` : config.systemPrompt) + memoryContext + (searchResult?.context || ''),
+        systemPrompt: config.systemPrompt + personalContext + (instructions ? `\n\n${instructions}` : '') + memoryContext + (searchResult?.context || ''),
         maxOutputTokens: generationParameters.max_output_tokens ?? (config.maxOutputTokens > 0
           ? outputTokenLimit(selectedProvider, selectedModel, config.maxOutputTokens) : 0),
       };

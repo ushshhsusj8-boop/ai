@@ -498,5 +498,12 @@
 #memory-dialog textarea { padding:10px; font:inherit; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:10px; }
 #memory-dialog .primary-button { color:var(--paper); background:var(--green); }
 #memory-dialog .text-button, #memory-dialog .secondary-button { color:var(--ink); background:var(--paper-deep); border:1px solid var(--line); }
+#personal-instructions-dialog p { font-size:14px; line-height:1.65; overflow-wrap:anywhere; }
+#personal-controls label { display:block; margin:14px 0 8px; }
+#personal-controls label:first-child { display:flex; align-items:center; gap:8px; }
+#personal-controls input[type="checkbox"] { width:18px; height:18px; flex:none; margin:0; }
+#personal-controls textarea { display:block; box-sizing:border-box; width:100%; min-height:150px; padding:12px; resize:vertical; font:inherit; line-height:1.6; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:10px; }
+#personal-controls .primary-button { color:var(--paper); background:var(--green); }
+#personal-controls .text-button { color:var(--ink); background:var(--paper-deep); border:1px solid var(--line); }
 .memory-context-option { display:flex; align-items:center; gap:8px; }
 .memory-context-option input[type="checkbox"] { width:18px; height:18px; flex:none; margin:0; }

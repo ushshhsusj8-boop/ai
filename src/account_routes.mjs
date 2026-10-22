@@ -182,6 +182,8 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
         sendJson(response, 200, store.deleteConversation(id, match[1], value.revision), headers); return true;
       }
       if (path === '/projects' && method === 'GET') { sendJson(response, 200, store.getProjects(id), headers); return true; }
+      if (path === '/instructions' && method === 'GET') { sendJson(response,200,store.listInstructions(id),headers);return true; }
+      if (path === '/instructions' && method === 'PUT') { const value=await body(request,16384);requireSession(request,true);sendJson(response,200,store.putInstructions(id,value),headers);return true; }
       if (path === '/memories' && method === 'GET') { sendJson(response, 200, store.listMemories(id), headers); return true; }
       if (path === '/memories' && method === 'PUT') { const value=await body(request,128*1024);requireSession(request,true);sendJson(response,200,store.putMemories(id,value),headers);return true; }
       if (path === '/code-history' && method === 'GET') { sendJson(response, 200, store.listCodeHistory(id), headers); return true; }
