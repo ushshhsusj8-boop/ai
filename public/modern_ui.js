@@ -2,11 +2,12 @@ import {scopedStorage} from './scoped_storage.js';
 import {uiPreferences, searchWorkspace} from './ui_state.js';
 import {openDocumentReader} from './document_reader.js';
 import {initUsageGuide} from './usage_guide.js';
-export function initModernUI({conversations, active, select, create, projects, notes, openNote, openWorkspace, openModels, busy, closeSidebar, toast}) {
+export function initModernUI({conversations, active, select, create, openTemporary, projects, notes, openNote, openWorkspace, openModels, busy, closeSidebar, toast}) {
   const $=s=>document.querySelector(s), node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text)n.textContent=text;return n;};
   const button=(label,action,cls='ui-nav-button')=>{const b=node('button',cls,label);b.type='button';b.onclick=action;return b;};
   function invoke(id){closeSidebar();const target=$('#'+id);if(!target||target.disabled){toast('此功能当前不可用，请先完成配置或等待任务结束。');return;}document.querySelector('dialog[open]')?.close();target.click();}
   const nav=node('nav','ui-navigation');nav.setAttribute('aria-label','主要功能');$('#new-chat').after(nav);
+  const temporaryButton=button('◌  临时聊天',()=>{closeSidebar();openTemporary?.();});temporaryButton.id='open-temporary-chat';nav.append(temporaryButton);
   const searchButton=button('⌕  搜索与快捷操作',()=>openSearch());searchButton.id='open-global-search';nav.append(searchButton);
   const projectButton=$('#open-projects');projectButton.className='ui-nav-button';projectButton.textContent='▦  项目空间';nav.append(projectButton);
   const writingButton=button('▤  写作画布',()=>{closeSidebar();openNote();});writingButton.id='open-writing-desk';nav.append(writingButton);

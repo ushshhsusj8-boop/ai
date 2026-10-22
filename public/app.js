@@ -3598,7 +3598,12 @@ if (accountUser) {
 }
 document.querySelector('.fine-print').textContent = accountUser ? 'AI 可能出错，请核对重要信息 · 此账户聊天与项目私有保存' : 'AI 可能出错，请核对重要信息 · 未登录的新聊天仅保存到此浏览器';
 writingDesk=initWritingDesk({toast:showToast,userId:accountUser?.id||null,onIdentityChanged:identityChanged,insert:text=>{if(state.busy){showToast('请等待当前回复完成后插入文稿。');return;}try{elements.promptInput.value=appendDraftText(elements.promptInput.value,text,elements.promptInput.maxLength);saveDraft();resizeTextarea();updateSendState();showToast('已放入当前聊天草稿，请核对后发送。');}catch(e){showToast(e.message);}}});
-modernUI=initModernUI({conversations:()=>state.conversations,active:activeConversation,select:selectConversation,create:createConversation,projects,notes:()=>writingDesk.notes(),openNote:(...args)=>writingDesk.open(...args),openWorkspace:()=>workspace.open(),openModels:origin=>chatLayout.open('models',origin),busy:()=>state.backgroundRequests.size>0,closeSidebar:()=>closeSidebar(false),toast:showToast});
+function openTemporaryChat(){
+  if(state.backgroundRequests.size||state.backupImportPending||privateSync?.running){showToast('请先完成生成、导入或聊天同步，再开始临时聊天。');return;}
+  if(!saveDraft()){showToast('当前草稿尚未保存，请先复制保留后再打开临时聊天。');return;}
+  location.assign('/temporary?theme='+(document.documentElement.dataset.theme==='dark'?'dark':'light'));
+}
+modernUI=initModernUI({openTemporary:openTemporaryChat,conversations:()=>state.conversations,active:activeConversation,select:selectConversation,create:createConversation,projects,notes:()=>writingDesk.notes(),openNote:(...args)=>writingDesk.open(...args),openWorkspace:()=>workspace.open(),openModels:origin=>chatLayout.open('models',origin),busy:()=>state.backgroundRequests.size>0,closeSidebar:()=>closeSidebar(false),toast:showToast});
 branchNavigation=initBranchNavigation({conversations:()=>state.conversations,active:activeConversation,select:selectConversation,toast:showToast});
 personalInstructions=initPersonalInstructions({user:accountUser,currentUser:()=>accountUser,identityChanged,changed:updateContextPreview,toast:showToast});
 accountMemory=initAccountMemory({user:accountUser,currentUser:()=>accountUser,identityChanged,toast:showToast,changed:updateContextPreview,active:activeConversation});

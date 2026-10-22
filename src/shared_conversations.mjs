@@ -34,6 +34,7 @@ function validTime(value, fallback = Date.now()) {
 }
 
 export function normalizeConversation(value, now = Date.now(), { allowEmpty = false } = {}) {
+  if(value?.temporary===true)throw Error("临时聊天不可保存、同步或发布。");
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw publicError("conversation must be an object");
   }

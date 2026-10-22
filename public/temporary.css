@@ -1,0 +1,32 @@
+.temporary-page { margin:0; height:100dvh; }
+#temporary-app { box-sizing:border-box; max-width:900px; height:100dvh; margin:auto; padding:16px 24px max(12px,env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:10px; }
+.temporary-header,.temporary-actions { display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap; }
+.temporary-header { flex:none; }
+.temporary-notice { flex:none; color:var(--muted); font-size:13px; line-height:1.65; }
+.temporary-notice p { max-height:20dvh; overflow:auto; margin:6px 0; }
+.temporary-notice summary { cursor:pointer; }
+.temporary-options { display:flex; flex-wrap:wrap; gap:10px; flex:none; }
+.temporary-options label { display:flex; gap:5px; align-items:center; min-width:0; font-size:13px; }
+.temporary-options select,.temporary-options input { min-width:0; max-width:250px; padding:8px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:8px; }
+.temporary-options input { width:100px; }
+#temporary-status { margin:0; font-size:13px; color:var(--muted); flex:none; }
+#temporary-messages { flex:1; overflow:auto; min-height:0; overscroll-behavior:contain; }
+.temporary-message { padding:12px 0; overflow-wrap:anywhere; }
+.temporary-message > strong { font-size:13px; color:var(--muted); }
+.temporary-message .message-text { white-space:pre-wrap; }
+.temporary-message pre { white-space:pre; overflow:auto; max-width:100%; }
+.temporary-message table { display:block; max-width:100%; overflow:auto; }
+#temporary-form { flex:none; border:1px solid var(--line); border-radius:18px; padding:12px; background:var(--paper); }
+#temporary-input { box-sizing:border-box; width:100%; min-height:60px; max-height:22dvh; resize:vertical; border:0; outline-offset:0; font:inherit; font-size:16px; line-height:1.6; color:var(--ink); background:transparent; }
+.temporary-actions small { color:var(--muted); font-size:12px; margin-right:auto; }
+.temporary-actions button { min-height:42px; }
+@media(max-width:600px) { #temporary-app { padding:10px 12px max(10px,env(safe-area-inset-bottom)); gap:7px; } .temporary-options label { flex:1; flex-wrap:wrap; } .temporary-options select { width:100%; } .temporary-options input { width:100%; } }
+@media(max-height:430px) { #temporary-app { padding:6px 10px; gap:4px; } .temporary-notice { font-size:12px; } .temporary-options label { flex-wrap:nowrap; } .temporary-options select,.temporary-options input { padding:4px; } #temporary-input { min-height:32px; height:32px; } .temporary-header button,.temporary-actions button { min-height:32px; padding:5px 10px; } }
+
+.temporary-message > strong { display:block; margin-bottom:6px; }
+.temporary-message .message-text > :first-child { margin-top:0; }
+.temporary-message .message-text > :last-child { margin-bottom:0; }
+.temporary-message .message-text p { margin:0 0 .8em; }
+.temporary-message[data-role="user"] { text-align:right; }
+.temporary-message[data-role="user"] .message-text { display:inline-block; padding:8px 14px; border-radius:18px; background:var(--ui-user); text-align:left; }
+.temporary-page .primary-button { color:var(--paper); background:var(--green); }

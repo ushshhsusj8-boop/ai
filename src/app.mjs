@@ -17,6 +17,10 @@ import { retrieveDocuments } from './document_retrieval.mjs';
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const STATIC_FILES = new Map([
+  ["/temporary", ["../public/temporary.html", "text/html; charset=utf-8"]],
+  ["/temporary.html", ["../public/temporary.html", "text/html; charset=utf-8"]],
+  ["/temporary.js", ["../public/temporary.js", "text/javascript; charset=utf-8"]],
+  ["/temporary.css", ["../public/temporary.css", "text/css; charset=utf-8"]],
   ["/memory_tools.js", ["../public/memory_tools.js", "text/javascript; charset=utf-8"]],
   ["/personal_instructions.js", ["../public/personal_instructions.js", "text/javascript; charset=utf-8"]],
   ["/account_memory.js", ["../public/account_memory.js", "text/javascript; charset=utf-8"]],
@@ -120,11 +124,11 @@ function sendEmpty(response, status, headers = {}) {
   return true;
 }
 
-function sendStatic(response, requestMethod, staticFile) {
+function sendStatic(response, requestMethod, staticFile, cacheControl = "no-cache") {
   if (response.destroyed || response.writableEnded) return false;
   response.writeHead(200, {
     ...baseHeaders(staticFile.contentType),
-    "cache-control": "no-cache",
+    "cache-control": cacheControl,
     "content-security-policy":
       "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self'; style-src-attr 'unsafe-inline'; connect-src 'self' blob:; img-src 'self' data: blob:; font-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
   });
@@ -647,6 +651,11 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
 
     try {
       const body = await readJson(request, Math.max(config.maxBodyBytes, 4 * 1024 * 1024));
+      if(body?.temporary!==undefined&&typeof body.temporary!=='boolean')throw Error('临时聊天开关无效。');
+      if(body?.temporary){
+        if(!validAccount(request))throw Object.assign(Error('请登录个人账户后使用临时聊天。'),{statusCode:403});
+        if(body.memory!==undefined||body.personalInstructions!==undefined||body.instructions||body.documents?.length||body.webSearch||body.messages?.some(m=>m.images?.length))throw Error('临时文字聊天不携带账户记忆、通用指令、资料、图片或联网搜索。');
+      }
       const instructions = validateChatInstructions(body?.instructions);
       let personalContext='';
       if(body?.personalInstructions!==undefined){
@@ -1216,7 +1225,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
 
     const staticFile = STATIC_FILES.get(url.pathname);
     if (staticFile && (request.method === "GET" || request.method === "HEAD")) {
-      sendStatic(response, request.method, staticFile);
+      sendStatic(response, request.method, staticFile, ["/temporary", "/temporary.html"].includes(url.pathname) ? "no-store" : "no-cache");
       return;
     }
 

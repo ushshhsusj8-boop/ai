@@ -1,5 +1,9 @@
 # Features and practical limits / 功能与边界
 
+## Temporary text chats
+
+After signing in, choose 临时聊天 in the sidebar. The isolated page retains text only in its own memory. It does not use account history, memory, instructions, projects, files or code tools, or write drafts, backups and sync data. Closing, refreshing, leaving, cached-page return or account changes clear the temporary content. Stream, stop, explicit retry, multi-turn text and model output-token settings are available. Upstream providers may retain requests under their own policies; this is not a zero-retention promise. The site retains content-free runtime and usage metadata. Normal chat and its existing draft remain available when you return.
+
 ## Conversations
 
 Each conversation has its own instructions, provider/model parameters, context preferences and draft. Modify-and-ask, continue-from-reply and regeneration create independent versions and preserve the original. Project inheritance shows a preparation state and rejects repeated clicks. Creating an edit/continue branch does not itself call a model; regeneration does.
