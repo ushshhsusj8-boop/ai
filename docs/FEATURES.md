@@ -1,5 +1,11 @@
 # Features and practical limits / 功能与边界
 
+## Revocable read-only text shares
+
+Open input tools → 分享当前对话, or 设置 → 只读分享与撤销. All messages start unchecked. Select text, review the complete local preview, then confirm to upload a frozen snapshot with a 1-, 7- or 30-day expiry (default 7). Attachments, source IDs, account/project settings and later messages are excluded; personal information already in selected text still needs review. Limits: 100 messages/128 KiB per snapshot, 20 records/2 MiB per account and 8 MiB globally. Revoke expired records to free slots. Oversized snapshots are rejected rather than truncated.
+
+Anyone holding the link can read it without signing in. Its random 256-bit secret is in the URL fragment, sent only in a request header without cookies; the server stores its SHA-256 digest. The link is displayed only after creation and cannot be recovered from the list. Revoke it from the account manager to deny future reads and remove the current snapshot. Already read/copied content and historical backups cannot be recalled. After restoring a full old server backup, review and revoke any restored shares. Normal deployment or code rollback must preserve current state. Public pages use no-store responses and revalidate on cached-page return or visibility changes.
+
 ## Temporary text chats
 
 After signing in, choose 临时聊天 in the sidebar. The isolated page retains text only in its own memory. It does not use account history, memory, instructions, projects, files or code tools, or write drafts, backups and sync data. Closing, refreshing, leaving, cached-page return or account changes clear the temporary content. Stream, stop, explicit retry, multi-turn text and model output-token settings are available. Upstream providers may retain requests under their own policies; this is not a zero-retention promise. The site retains content-free runtime and usage metadata. Normal chat and its existing draft remain available when you return.

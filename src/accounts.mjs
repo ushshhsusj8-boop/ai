@@ -10,6 +10,7 @@ import { createHistoryCloudStore } from './history_cloud.mjs';
 import {createProjectOriginalStore} from './project_originals.mjs';
 import {createAccountMemory} from './account_memory.mjs';
 import {createAccountInstructions} from './account_instructions.mjs';
+import {createAccountShares} from './account_shares.mjs';
 
 const scrypt = promisify(deriveKey);
 const DAY = 86_400_000;
@@ -140,12 +141,14 @@ export function createAccountStore(filePath, { now = Date.now, sessionDays = 30 
   const prompts=createPromptCloud(`${file}.prompts`,{requireUser:userFor,now});
   const writing=createWritingNotes(`${file}.writing`,{requireUser:userFor,now});
   const memory=createAccountMemory(`${file}.memories`,{requireUser:userFor});
+  const shares=createAccountShares(`${file}.shares.json`,{requireUser:userFor,now});
   const instructions=createAccountInstructions(`${file}.instructions`,{requireUser:userFor});
   const codeHistory=createHistoryCloudStore(`${file}.code-history`,{requireUser:userFor});
   const originals=createProjectOriginalStore(`${file}.originals`,{requireUser:userFor,getProjects:id=>workspace(id).value.projects,now});
   return Object.freeze({
     listPrompts:prompts.list,putPrompts:prompts.put,
     listMemories:memory.list,putMemories:memory.put,resolveMemories:memory.resolve,
+    listShares:shares.list,createShare:shares.create,revokeShare:shares.revoke,resolveShare:shares.resolve,
     listInstructions:instructions.list,putInstructions:instructions.put,resolveInstructions:instructions.resolve,
     listWriting:writing.list,putWriting:writing.put,deleteWriting:writing.remove,
     listCodeHistory:codeHistory.list,mergeCodeHistory:codeHistory.merge,deleteCodeHistory:codeHistory.remove,

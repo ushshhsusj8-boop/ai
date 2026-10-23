@@ -17,6 +17,7 @@ import { historyBucket,historyPage } from './ui_state.js';
 import {prepareChatContext,formatContextReport} from './context_budget.js';
 import {initAccountMemory} from './account_memory.js';
 import {initPersonalInstructions} from './personal_instructions.js';
+import {initPrivateShares} from './private_shares.js';
 "use strict";
 
 import { initWorkspace, workspacePreferences } from "./workspace.js";
@@ -36,6 +37,7 @@ let visionComposer;
 let voiceComposer;
 let accountMemory;
 let personalInstructions;
+let privateShares;
 let privateSync;
 let accountUI;
 let modernUI;
@@ -3545,7 +3547,7 @@ restoreDraft(activeConversation());
 const chatLayout = initMobileLayout();
 initAccessibility();
 accountUI = initAccountUI({
-  busy: () => Boolean(personalInstructions?.busy()) || Boolean(accountMemory?.busy()) || state.backgroundRequests.size > 0 || Boolean(document.querySelector('#code-stop:not(:disabled)')) || Boolean(document.querySelector('#attachment-review[open] #attachment-insert:disabled')) || Boolean(document.querySelector('#project-dialog[open] button:disabled')),
+  busy: () => Boolean(privateShares?.busy()) || Boolean(personalInstructions?.busy()) || Boolean(accountMemory?.busy()) || state.backgroundRequests.size > 0 || Boolean(document.querySelector('#code-stop:not(:disabled)')) || Boolean(document.querySelector('#attachment-review[open] #attachment-insert:disabled')) || Boolean(document.querySelector('#project-dialog[open] button:disabled')),
   beforeChange: () => {
     const draftSaved = saveDraft();
     if (!draftSaved && elements.promptInput.value.trim()) {
@@ -3606,6 +3608,7 @@ function openTemporaryChat(){
 modernUI=initModernUI({openTemporary:openTemporaryChat,conversations:()=>state.conversations,active:activeConversation,select:selectConversation,create:createConversation,projects,notes:()=>writingDesk.notes(),openNote:(...args)=>writingDesk.open(...args),openWorkspace:()=>workspace.open(),openModels:origin=>chatLayout.open('models',origin),busy:()=>state.backgroundRequests.size>0,closeSidebar:()=>closeSidebar(false),toast:showToast});
 branchNavigation=initBranchNavigation({conversations:()=>state.conversations,active:activeConversation,select:selectConversation,toast:showToast});
 personalInstructions=initPersonalInstructions({user:accountUser,currentUser:()=>accountUser,identityChanged,changed:updateContextPreview,toast:showToast});
+privateShares=initPrivateShares({user:accountUser,currentUser:()=>accountUser,identityChanged,active:activeConversation,busy:()=>state.backgroundRequests.size>0||state.backupImportPending,toast:showToast});
 accountMemory=initAccountMemory({user:accountUser,currentUser:()=>accountUser,identityChanged,toast:showToast,changed:updateContextPreview,active:activeConversation});
 void loadProviders();
 window.setInterval(() => {

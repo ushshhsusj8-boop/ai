@@ -1,0 +1,28 @@
+#private-share-dialog p { font-size:14px; line-height:1.65; overflow-wrap:anywhere; }
+#private-share-dialog input:not([type="checkbox"]),#private-share-dialog select { box-sizing:border-box; width:100%; padding:10px; margin:7px 0 12px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:8px; }
+#private-share-dialog label { display:block; }
+#share-candidates { max-height:30dvh; overflow:auto; margin-bottom:14px; border:1px solid var(--line); border-radius:10px; }
+#share-candidates label { display:flex; align-items:flex-start; gap:9px; padding:10px; border-bottom:1px solid var(--line); }
+#share-candidates input { width:18px; height:18px; flex:none; margin:4px 0; }
+#share-candidates pre,#share-preview-content pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; font-size:14px; line-height:1.6; margin:0; min-width:0; }
+#share-preview-content pre { padding:12px 0; border-top:1px solid var(--line); }
+#private-share-dialog .primary-button { color:var(--paper); background:var(--green); }
+#private-share-dialog .secondary-button,#private-share-dialog .text-button { color:var(--ink); background:var(--paper-deep); border:1px solid var(--line); }
+#share-list article { padding:12px 0; border-bottom:1px solid var(--line); }
+#share-preview-area,#share-created { margin:18px 0; padding:12px; border:1px solid var(--line); border-radius:10px; }
+#shared-view { max-width:900px; box-sizing:border-box; margin:auto; height:100dvh; display:flex; flex-direction:column; padding:20px; gap:12px; }
+#shared-view header { display:flex; gap:16px; justify-content:space-between; flex-wrap:wrap; }
+#shared-view a { color:var(--green-dark); }
+#shared-title { font-size:22px; margin:0; overflow-wrap:anywhere; }
+#shared-status,.shared-footer { font-size:13px; line-height:1.6; color:var(--muted); margin:0; }
+#shared-messages { min-height:0; overflow:auto; overscroll-behavior:contain; flex:1; }
+#shared-messages article { padding:14px 0; overflow-wrap:anywhere; }
+#shared-messages strong { font-size:13px; color:var(--muted); }
+#shared-messages pre { max-width:100%; overflow:auto; }
+#shared-messages table { display:block; max-width:100%; overflow:auto; }
+#shared-messages .message-text > :first-child { margin-top:7px; }
+#shared-messages .message-text > :last-child { margin-bottom:0; }
+@media(max-width:600px),(max-height:430px){#shared-view{padding:12px;gap:8px;}#shared-title{font-size:18px;}.shared-footer{font-size:12px;max-height:16dvh;overflow:auto;}}
+
+#private-share-dialog .dialog-heading { position:sticky; top:-24px; z-index:2; background:var(--paper); padding:8px 0; }
+#private-share-dialog .dialog-heading h2 { font-size:18px; }

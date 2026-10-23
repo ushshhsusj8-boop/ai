@@ -17,3 +17,7 @@ Use HTTPS, disable local no-auth mode in production, restrict backend ingress an
 ## Known dependency advisory
 
 An npm audit on 2026-10-22 reports one moderate-severity advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), propagated through `mammoth` → `argparse` → `sprintf-js` (three affected package entries). It concerns unbounded precision in formatting strings. Application-level reachability has not been established. The audit tool proposes a major rollback of `mammoth`; that rollback has not been applied. Do not treat passing tests as a clean security audit.
+
+## Shared snapshot access
+
+Sharing requires explicit selection, local preview and confirmation. The public reader uses a bearer secret, not account authorization; anyone given the full link can read its selected text until expiry or revocation. Secrets have 256 bits of entropy, stay out of URL request paths and are stored only as SHA-256 digests. Private creation/list/revocation require the authenticated owner and same-origin checks. Account revisions and request IDs reject stale writes and duplicate creation. Untrusted Markdown is rendered safely, public fetches omit cookies, and pages/APIs use no-store. Revocation denies future reads and erases the current snapshot, but cannot erase screenshots, downloaded copies or historical backups. Restoring an old complete state backup may restore formerly active links: review and revoke restored records before reopening access. Code-only rollback must not restore old state.

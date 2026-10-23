@@ -17,6 +17,12 @@ import { retrieveDocuments } from './document_retrieval.mjs';
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const STATIC_FILES = new Map([
+  ["/share", ["../public/share.html", "text/html; charset=utf-8"]],
+  ["/share.html", ["../public/share.html", "text/html; charset=utf-8"]],
+  ["/share.css", ["../public/share.css", "text/css; charset=utf-8"]],
+  ["/share_tools.js", ["../public/share_tools.js", "text/javascript; charset=utf-8"]],
+  ["/private_shares.js", ["../public/private_shares.js", "text/javascript; charset=utf-8"]],
+  ["/share_view.js", ["../public/share_view.js", "text/javascript; charset=utf-8"]],
   ["/temporary", ["../public/temporary.html", "text/html; charset=utf-8"]],
   ["/temporary.html", ["../public/temporary.html", "text/html; charset=utf-8"]],
   ["/temporary.js", ["../public/temporary.js", "text/javascript; charset=utf-8"]],
@@ -999,6 +1005,13 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
       return;
     }
 
+    if(url.pathname==='/api/share-view'){
+      if(request.method!=='GET'){sendJson(response,405,{error:'只读分享仅支持读取。'},{allow:'GET'});return;}
+      if(!consumeRateLimit(clientIp(request,config)).allowed){sendJson(response,429,{error:'访问过于频繁，请稍后重试。'});return;}
+      try{if(!accountStore)throw Object.assign(Error('Unavailable'),{statusCode:404});sendJson(response,200,accountStore.resolveShare(firstHeaderValue(request.headers['x-plaude-share-token'])),{'cache-control':'no-store','referrer-policy':'no-referrer','x-robots-tag':'noindex, nofollow, noarchive'});}
+      catch(error){const status=error.statusCode===404?404:500;sendJson(response,status,{error:status===404?'分享链接已失效或不可用。':'暂时无法读取分享，请稍后重试。'});}
+      return;
+    }
     if (url.pathname.startsWith('/api/account/')) {
       if (accountRoutes && await accountRoutes.handle(request, response, url)) return;
       if (url.pathname === '/api/account/session' && request.method === 'GET') { sendJson(response, 200, {enabled: false, user: null}); return; }
@@ -1225,7 +1238,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
 
     const staticFile = STATIC_FILES.get(url.pathname);
     if (staticFile && (request.method === "GET" || request.method === "HEAD")) {
-      sendStatic(response, request.method, staticFile, ["/temporary", "/temporary.html"].includes(url.pathname) ? "no-store" : "no-cache");
+      sendStatic(response, request.method, staticFile, ["/temporary", "/temporary.html", "/share", "/share.html"].includes(url.pathname) ? "no-store" : "no-cache");
       return;
     }
 

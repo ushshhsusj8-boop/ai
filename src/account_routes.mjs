@@ -184,6 +184,10 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
       if (path === '/projects' && method === 'GET') { sendJson(response, 200, store.getProjects(id), headers); return true; }
       if (path === '/instructions' && method === 'GET') { sendJson(response,200,store.listInstructions(id),headers);return true; }
       if (path === '/instructions' && method === 'PUT') { const value=await body(request,16384);requireSession(request,true);sendJson(response,200,store.putInstructions(id,value),headers);return true; }
+      if(path==='/shares'&&method==='GET'){requireSession(request,true);sendJson(response,200,store.listShares(id),headers);return true;}
+      if(path==='/shares'&&method==='POST'){const value=await body(request,132*1024);requireSession(request,true);rateLimit('shares:'+id,30,MINUTE);sendJson(response,201,store.createShare(id,value),headers);return true;}
+      const shareMatch=/^\/shares\/([0-9a-f-]{36})$/.exec(path);
+      if(shareMatch&&method==='DELETE'){const value=await body(request);requireSession(request,true);sendJson(response,200,store.revokeShare(id,shareMatch[1],value),headers);return true;}
       if (path === '/memories' && method === 'GET') { sendJson(response, 200, store.listMemories(id), headers); return true; }
       if (path === '/memories' && method === 'PUT') { const value=await body(request,128*1024);requireSession(request,true);sendJson(response,200,store.putMemories(id,value),headers);return true; }
       if (path === '/code-history' && method === 'GET') { sendJson(response, 200, store.listCodeHistory(id), headers); return true; }
