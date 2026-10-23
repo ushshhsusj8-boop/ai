@@ -1090,25 +1090,32 @@ async function branchFromMessage(conversation, messageIndex) {
     };
 
     try { await projects.inherit(conversation.id, branch.id); } catch (error) { showToast(error.message); return; }
+    const activate = state.activeId === sourceId;
+    // A pending branch must keep the newer active draft, including an empty chat.
     state.conversations = state.conversations.filter((item) =>
-      (item.messages.length > 0 || item.documents?.length||item.projectLinked||item.branch) && item.id !== state.draftBranchId
+      (!activate && item.id === state.activeId) || ((item.messages.length > 0 || item.documents?.length||item.projectLinked||item.branch) && item.id !== state.draftBranchId)
     );
-    state.draftBranchId = '';
+    if (activate) state.draftBranchId = '';
     state.conversations.unshift(branch);
-    state.activeId = branch.id;
-    if (provider && state.providers.some((item) => item.id === provider)) {
-      elements.providerSelect.value = provider;
+    const branchDraft = editingQuestion ? selected.content : "";
+    saveDraft(branch, branchDraft);
+    if (activate) {
+      state.activeId = branch.id;
+      if (provider && state.providers.some((item) => item.id === provider)) {
+        elements.providerSelect.value = provider;
+      }
+      syncModelOptions(branch);
+      elements.promptInput.value = branchDraft;
     }
-    syncModelOptions(branch);
-    elements.promptInput.value = editingQuestion ? selected.content : "";
     visionComposer?.setImages(editingQuestion ? selected.images || [] : [], draftKey(branch));
-    saveDraft(branch, elements.promptInput.value);
     saveConversations();
     resizeTextarea();
-    render({ scrollToBottom: true });
-    closeSidebar();
-    elements.promptInput.focus();
-    showToast(editingQuestion
+    render({ scrollToBottom: activate });
+    if (activate) {
+      closeSidebar();
+      elements.promptInput.focus();
+    }
+    showToast(!activate ? "分支已在后台创建，可在对话历史中打开；当前草稿保持不变。" : editingQuestion
       ? "已创建对话分支；修改问题后发送，原对话仍会保留。"
       : "已从这条回复创建分支；输入新问题继续对话。原对话仍会保留。");
   } finally {
@@ -3015,9 +3022,12 @@ async function regenerateLastReply() {
       pinned: false, archived: false, updatedAt: Date.now(), lastUsage: null,
       messages: conversation.messages.slice(0, -1).map(message => ({ ...message })) };
     try { await projects.inherit(conversation.id, branch.id); } catch (error) { showToast(error.message); return; }
-    state.conversations.unshift(branch); state.activeId = branch.id; saveConversations();
-    showToast('已创建重新生成分支，原对话和回复继续保留。');
-    void requestConversation(branch, branch.messages.at(-1));
+    const activate = state.activeId === conversation.id;
+    state.conversations.unshift(branch);
+    if (activate) state.activeId = branch.id;
+    saveConversations();
+    showToast(activate ? '已创建重新生成分支，原对话和回复继续保留。' : '正在后台重新生成，可在对话历史中打开新版本；当前草稿保持不变。');
+    void requestConversation(branch, branch.messages.at(-1), null, { background: !activate });
   } finally {
     state.regeneratingIds.delete(sourceId);
     renderMessages();
