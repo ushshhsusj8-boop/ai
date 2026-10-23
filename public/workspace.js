@@ -193,6 +193,7 @@ export function initWorkspace(callbacks) {
   applyAppearance(workspacePreferences());
   async function open(section = 'connections') {
     if (saving || parsing) return;
+    if(['connections','custom'].includes(section)&&callbacks.openPersonalConnections){await callbacks.openPersonalConnections();return;}
     const previousFocus = document.activeElement;
     callbacks.prepareParameters(); syncParameterJson(); setConnectionAccess(false);
     expandConnection(false);

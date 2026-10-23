@@ -1,3 +1,4 @@
+import {createConnectionNetwork} from './connection_network.mjs';
 import { callCodeRunner, validateCodeJob } from './code_execution.mjs';
 import {validateCodeArtifacts} from '../public/code_artifact_tools.js';
 import { createAccountRoutes } from './account_routes.mjs';
@@ -17,6 +18,8 @@ import { retrieveDocuments } from './document_retrieval.mjs';
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const STATIC_FILES = new Map([
+  ["/connection_tools.js", ["../public/connection_tools.js", "text/javascript; charset=utf-8"]],
+  ["/model_connections.js", ["../public/model_connections.js", "text/javascript; charset=utf-8"]],
   ["/share", ["../public/share.html", "text/html; charset=utf-8"]],
   ["/share.html", ["../public/share.html", "text/html; charset=utf-8"]],
   ["/share.css", ["../public/share.css", "text/css; charset=utf-8"]],
@@ -391,6 +394,7 @@ function publicProviders(config) {
   return Object.values(config.providers).map((provider) => ({
     id: provider.id,
     label: provider.label,
+    ...(provider.privateConnection?{privateConnection:true,connectionRevision:provider.connectionRevision}:{}),
     model: provider.model,
     models: (provider.modelOptions?.length ? provider.modelOptions
       : allowedModelIds(provider).map(id => ({ id, label: id }))).map(({ id, label }) => {
@@ -478,7 +482,7 @@ function selectOpenAIProvider(body, config) {
   return config.providers[body.model];
 }
 
-export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, workspaceStore, accountStore, runCode = callCodeRunner }) {
+export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, workspaceStore, accountStore, runCode = callCodeRunner, connectionNetwork = createConnectionNetwork() }) {
   const accountRoutes = accountStore && createAccountRoutes({store: accountStore, config, readJson, sendJson, clientIp: req => clientIp(req, config)});
   function validAccount(request) {
     const session = accountRoutes?.authenticate(request);
@@ -643,7 +647,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
     let dailyHeaders = {};
     let currentTokenStatus = tokenStatus();
     let currentTokenHeaders = tokenHeaders(currentTokenStatus);
-    let selectedProvider;
+    let selectedProvider, privateNetwork, privateUpstreamStarted=false;
     const wantsStream = firstHeaderValue(request.headers.accept).includes('text/event-stream');
     let heartbeat;
     function streamEvent(event, payload) {
@@ -682,7 +686,14 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
       if (request.jsonBodyBytes - imageBytes - documentBytes > config.maxBodyBytes) {
         const error = new Error('Request body is too large'); error.statusCode = 413; throw error;
       }
-      selectedProvider = selectProvider(body, config);
+      if(typeof body?.provider==='string'&&body.provider.startsWith('mine-')){
+        const owner=validAccount(request)?.user?.id;
+        if(!owner)throw Object.assign(Error('请登录自己的账户后使用个人模型连接。'),{statusCode:403});
+        selectedProvider=accountStore.resolveConnection(owner,body.provider,body.connectionRevision);
+      }else{
+        if(body?.connectionRevision!==undefined)throw Error('连接版本只能用于个人模型连接。');
+        selectedProvider = selectProvider(body, config);
+      }
       const selectedModel = selectModel(body, selectedProvider);
       const hasImages = messages.some(message => message.images?.length);
       if (hasImages && !supportsImageInput(selectedProvider, selectedModel)) throw new Error('当前模型未确认支持图片，请选择标有“看图”的模型，或使用 OCR 提取文字。');
@@ -760,6 +771,14 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
         maxOutputTokens: generationParameters.max_output_tokens ?? (config.maxOutputTokens > 0
           ? outputTokenLimit(selectedProvider, selectedModel, config.maxOutputTokens) : 0),
       };
+      if(selectedProvider.privateConnection){
+        const context=requestOriginContext(request,config),blockedHosts=[];
+        if(context.parsedOrigin)blockedHosts.push(context.parsedOrigin.hostname);
+        for(const raw of config.allowedOrigins||[])try{blockedHosts.push(new URL(raw).hostname);}catch{}
+        privateNetwork=await connectionNetwork(selectedProvider,{blockedHosts,blockedAddresses:[request.socket.localAddress].filter(Boolean)});
+        if(response.destroyed)return;
+        privateUpstreamStarted=true;
+      }
       const result = await callProvider({
         provider: { ...selectedProvider, model: selectedModel },
         messages: documentResult ? messages.map((message, index) => index === messages.length - 1
@@ -770,7 +789,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
         request,
         response,
         requestId,
-        fetchImpl,
+        fetchImpl: privateNetwork?.fetch || fetchImpl,
         ...(wantsStream ? { onDelta: text => streamEvent('delta', { text }) } : {}),
       });
       currentTokenStatus = recordTokens(result.usage?.totalTokens);
@@ -815,7 +834,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
         ? "上游服务暂时不可用，请稍后重试。"
         : status === 429
           ? "上游额度或速率受限，请稍后重试。"
-          : error.message || "请求无效。";
+          : privateUpstreamStarted ? "自定义模型服务请求失败，请核对地址、协议、密钥和模型 ID。" : error.message || "请求无效。";
       const headers = { ...rateHeaders, ...dailyHeaders, ...currentTokenHeaders };
       if (error?.retryAfter) headers["retry-after"] = error.retryAfter;
       recordActivity(response.destroyed ? 'chat_cancelled' : 'chat_failed', response.destroyed ? '连接中断或用户停止' : `请求失败 · 状态 ${status}`, requestId, ownerOf(request));
@@ -824,6 +843,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
       } else sendJson(response, status, { error: publicMessage, requestId }, headers);
     } finally {
       clearInterval(heartbeat);
+      if(privateNetwork)void privateNetwork.close();
       activeRequests -= 1;
     }
   }
@@ -1165,18 +1185,19 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
         });
         return;
       }
-      sendJson(response, 200, {
+      try { sendJson(response, 200, {
         defaultProvider: config.defaultProvider,
         concurrentRequests: Math.min(2, config.maxConcurrentRequests),
         limits: {maxInputChars: config.maxInputChars, maxMessages: 24},
-        providers: publicProviders(config),
+        providers: publicProviders(validAccount(request)?{...config,providers:{...config.providers,...Object.fromEntries(accountStore.connectionProviders(validAccount(request).user.id).map(p=>[p.id,p]))}}:config),
         features: {
           sharedConversations: Boolean(sharedStore),
           parallelTasks: true,
           codeExecution: Boolean(config.codeRunnerSocket),
           activityLogs: true,
         },
-      }, cors.headers);
+      }, {...cors.headers,vary:'Cookie, Origin'});
+      }catch{sendJson(response,500,{error:'个人模型连接暂时无法读取，请稍后重试；现有资料未改动。'});}
       return;
     }
 

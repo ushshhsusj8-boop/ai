@@ -1,5 +1,13 @@
 # Features and practical limits / 功能与边界
 
+## Personal model URLs and keys
+
+Every signed-in account can open 设置 → 我的模型连接 · 自定义 URL to add, edit or delete its own URL, API key and model IDs. There is no fixed provider list. Use a public HTTPS Base URL or a complete OpenAI-compatible Chat Completions/Responses endpoint; the matching path is normalized on save. Up to 12 connections and 24 models per connection are supported. Saving does not call a model. Select the saved “我的” provider at the top of normal or temporary chat to send a question.
+
+Keys and connection contents are encrypted per account on the server and keys never return to the form, browser storage or chat request body. An unchanged endpoint may retain a blank key field; changing URL/protocol requires reentering your own key. Revision conflicts preserve drafts. Another account cannot view or use the connection. Deleting it preserves chat and does not silently reroute its next question. Existing shared providers remain available. Only enable images when the provider confirms support; submitted context follows that provider's retention policy and billing.
+
+Private connections use direct public HTTPS with certificate checks. Local/private/reserved/metadata addresses, this server, URL credentials, query secrets and redirects are rejected. DNS results are all checked and the selected address is pinned for the actual socket connection. Private connections do not inherit site keys or change global proxies. Include the account-file connections directory AND connections.key encryption key in full private server backups; chat JSON alone does not back them up. Never publish these files.
+
 ## Revocable read-only text shares
 
 Open input tools → 分享当前对话, or 设置 → 只读分享与撤销. All messages start unchecked. Select text, review the complete local preview, then confirm to upload a frozen snapshot with a 1-, 7- or 30-day expiry (default 7). Attachments, source IDs, account/project settings and later messages are excluded; personal information already in selected text still needs review. Limits: 100 messages/128 KiB per snapshot, 20 records/2 MiB per account and 8 MiB globally. Revoke expired records to free slots. Oversized snapshots are rejected rather than truncated.

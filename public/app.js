@@ -20,6 +20,7 @@ import {initPersonalInstructions} from './personal_instructions.js';
 import {initPrivateShares} from './private_shares.js';
 "use strict";
 
+import {initModelConnections} from './model_connections.js';
 import { initWorkspace, workspacePreferences } from "./workspace.js";
 import { initWorkbench } from "./workbench.js";
 import { appendDraftText } from "./workbench_tools.js";
@@ -1541,7 +1542,7 @@ function resizeTextarea() {
 function updateSendState() {
   const backgroundBusy = Boolean(activeBackgroundRequest());
   elements.sendButton.disabled = !state.busy && (
-    (elements.promptInput.value.trim().length === 0 && !visionComposer?.images().length) || state.providers.length === 0
+    (elements.promptInput.value.trim().length === 0 && !visionComposer?.images().length) || state.providers.length === 0 || !selectedProvider()
   );
   elements.sendButton.classList.toggle("cancel", state.busy);
   elements.sendButton.setAttribute("aria-label", state.busy ? state.parallelTasks.get(state.activeId)?.status === 'queued' ? '取消排队' : '停止当前对话生成' : '发送消息');
@@ -2349,7 +2350,7 @@ function saveToken() {
 async function loadProviders() {
   try {
     const response = await fetch("/api/providers", {
-      headers: { accept: "application/json" },
+      cache: "no-store", credentials: "same-origin", headers: { accept: "application/json", ...accountHeaders() },
     });
     const payload = await response.json();
     if (!response.ok || !Array.isArray(payload.providers) || payload.providers.length === 0) {
@@ -2380,11 +2381,13 @@ async function loadProviders() {
     }
 
     const conversation = activeConversation();
-    const selected = conversation?.provider && state.providers.some((item) => item.id === conversation.provider)
+    const missingPersonal=conversation?.provider?.startsWith('mine-')&&!state.providers.some(p=>p.id===conversation.provider);
+    if(missingPersonal){const unavailable=new Option('个人连接已不可用 · 请重新选择',conversation.provider);unavailable.disabled=true;elements.providerSelect.prepend(unavailable);}
+    const selected = missingPersonal?conversation.provider:conversation?.provider && state.providers.some((item) => item.id === conversation.provider)
       ? conversation.provider
       : state.defaultProvider;
     elements.providerSelect.value = selected;
-    if (conversation) conversation.provider = selected;
+    if (conversation&&!missingPersonal) conversation.provider = selected;
     syncModelOptions(conversation);
     const modelCount = state.providers.reduce((total, provider) =>
       total + modelsFor(provider).length, 0);
@@ -2495,6 +2498,7 @@ async function requestConversation(conversation, userMessage, replacementAssista
       signal: controller.signal,
       body: JSON.stringify({
         provider: conversation.provider,
+        ...(state.providers.find(p=>p.id===conversation.provider)?.privateConnection?{connectionRevision:state.providers.find(p=>p.id===conversation.provider).connectionRevision}:{}),
         model: conversation.model || undefined,
         parameters: parametersForProvider(
           state.providers.find((item) => item.id === conversation.provider),
@@ -3497,7 +3501,9 @@ const executionConsole = initExecutionConsole({
   },
   authenticate: () => accountUser ? identityChanged() : openSettings(), insert: insertReviewedDocument, toast: showToast,
 });
+let modelConnections;
 workspace = initWorkspace({
+  openPersonalConnections:()=>modelConnections?.open(),
   openLogs: executionConsole.openLogs,
   prepareParameters: prepareModelParameters,
   readParameters: readModelParameters,
@@ -3547,7 +3553,7 @@ restoreDraft(activeConversation());
 const chatLayout = initMobileLayout();
 initAccessibility();
 accountUI = initAccountUI({
-  busy: () => Boolean(privateShares?.busy()) || Boolean(personalInstructions?.busy()) || Boolean(accountMemory?.busy()) || state.backgroundRequests.size > 0 || Boolean(document.querySelector('#code-stop:not(:disabled)')) || Boolean(document.querySelector('#attachment-review[open] #attachment-insert:disabled')) || Boolean(document.querySelector('#project-dialog[open] button:disabled')),
+  busy: () => Boolean(modelConnections?.isBusy()) || Boolean(privateShares?.busy()) || Boolean(personalInstructions?.busy()) || Boolean(accountMemory?.busy()) || state.backgroundRequests.size > 0 || Boolean(document.querySelector('#code-stop:not(:disabled)')) || Boolean(document.querySelector('#attachment-review[open] #attachment-insert:disabled')) || Boolean(document.querySelector('#project-dialog[open] button:disabled')),
   beforeChange: () => {
     const draftSaved = saveDraft();
     if (!draftSaved && elements.promptInput.value.trim()) {
@@ -3609,6 +3615,7 @@ modernUI=initModernUI({openTemporary:openTemporaryChat,conversations:()=>state.c
 branchNavigation=initBranchNavigation({conversations:()=>state.conversations,active:activeConversation,select:selectConversation,toast:showToast});
 personalInstructions=initPersonalInstructions({user:accountUser,currentUser:()=>accountUser,identityChanged,changed:updateContextPreview,toast:showToast});
 privateShares=initPrivateShares({user:accountUser,currentUser:()=>accountUser,identityChanged,active:activeConversation,busy:()=>state.backgroundRequests.size>0||state.backupImportPending,toast:showToast});
+modelConnections=initModelConnections({user:accountUser,reloadProviders:loadProviders,toast:showToast,identityChanged,busy:()=>state.busy||Boolean(activeBackgroundRequest())||state.backgroundRequests.size>0});
 accountMemory=initAccountMemory({user:accountUser,currentUser:()=>accountUser,identityChanged,toast:showToast,changed:updateContextPreview,active:activeConversation});
 void loadProviders();
 window.setInterval(() => {

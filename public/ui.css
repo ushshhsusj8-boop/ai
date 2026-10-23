@@ -507,3 +507,17 @@
 #personal-controls .text-button { color:var(--ink); background:var(--paper-deep); border:1px solid var(--line); }
 .memory-context-option { display:flex; align-items:center; gap:8px; }
 .memory-context-option input[type="checkbox"] { width:18px; height:18px; flex:none; margin:0; }
+#model-connections-dialog { width:min(640px,calc(100vw - 24px)); max-height:calc(100dvh - 28px); background:var(--surface-solid); }
+#model-connections-dialog .dialog-card { padding:20px; }
+#model-connections-dialog .dialog-heading { position:sticky; top:-20px; z-index:2; padding:10px 0; background:var(--surface-solid); align-items:center; }
+#model-connections-dialog h2 { font-family:inherit; font-weight:600; font-size:22px; line-height:1.3; margin:0; }
+#model-connections-dialog p { font-size:13px; line-height:1.65; color:var(--muted); overflow-wrap:anywhere; }
+#model-connections-dialog label { display:block; margin:15px 0 7px; font-size:13px; font-weight:600; }
+#model-connections-dialog input:not([type="checkbox"]), #model-connections-dialog select, #model-connections-dialog textarea { display:block; box-sizing:border-box; width:100%; min-width:0; min-height:42px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; color:var(--ink); background:var(--paper); font:inherit; font-size:14px; }
+#model-connections-dialog textarea { min-height:96px; line-height:1.6; }
+#model-connections-dialog label:has(input[type="checkbox"]) { display:flex; gap:9px; align-items:flex-start; font-weight:400; }
+#model-connections-dialog input[type="checkbox"] { width:18px; height:18px; margin:0; flex:none; }
+#model-connections-dialog input:focus-visible, #model-connections-dialog select:focus-visible, #model-connections-dialog textarea:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
+#model-connections-dialog .project-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+#model-connections-dialog .primary-button { color:var(--paper); background:var(--ink); border:1px solid var(--ink); }
+#model-connections-dialog .secondary-button, #model-connections-dialog .text-button { color:var(--ink); background:var(--paper-deep); border:1px solid var(--line); }

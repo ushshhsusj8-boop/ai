@@ -6,6 +6,7 @@ A self-hosted, multi-provider AI chat workspace built with Node.js and browser-n
 
 ## What it does
 
+- Let every account manage personal model URLs and encrypted API keys, with no fixed provider list.
 - Preview selected text and create expiring read-only links; revoke access from your account.
 - Stream responses, keep separate conversation instructions, retry interrupted questions and navigate conversation branches.
 - Use private accounts with cross-device chat, project, prompt-library, writing-canvas and explicit long-term-memory sync.
@@ -43,7 +44,7 @@ npm run check
 npm test
 ```
 
-The current source contains 346 tests. On Windows, 342 pass and four Linux-specific tests are skipped. Tests use temporary data and mocked model transports. CI is configured for Windows and Linux; a configured workflow is not evidence that a hosted CI run has already passed.
+The current source contains 357 tests. On Windows, 353 pass and four Linux-specific tests are skipped. Tests use temporary data and mocked model transports. CI is configured for Windows and Linux; a configured workflow is not evidence that a hosted CI run has already passed.
 
 ## Data and scope
 

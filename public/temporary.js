@@ -35,7 +35,7 @@ async function generate(retry=false){
   const timer=setTimeout(()=>request.abort(),180000);let answer=null;
   const add=delta=>{if(disposed||request.signal.aborted)return;if(!answer){if(retry&&messages.at(-1)?.role==='assistant')messages.pop();answer={role:'assistant',content:'',streaming:true};messages.push(answer);}if(answer.content.length+delta.length>240000)throw Error('回复超过本页大小限制，已收到的文字保留。');answer.content+=delta;paint();};
   try{
-    const response=await fetch('/api/chat',{method:'POST',credentials:'same-origin',cache:'no-store',signal:request.signal,headers:{'content-type':'application/json',accept:'text/event-stream','x-yunjian-ui':'browser','x-plaude-client':'1','x-plaude-account-id':userId},body:JSON.stringify({temporary:true,provider:$('provider').value,model:$('model').value,messages:prepared.messages,...($('output').value?{parameters:{max_output_tokens:Number($('output').value)}}:{})})});
+    const response=await fetch('/api/chat',{method:'POST',credentials:'same-origin',cache:'no-store',signal:request.signal,headers:{'content-type':'application/json',accept:'text/event-stream','x-yunjian-ui':'browser','x-plaude-client':'1','x-plaude-account-id':userId},body:JSON.stringify({temporary:true,provider:$('provider').value,...(providers.find(p=>p.id===$('provider').value)?.privateConnection?{connectionRevision:providers.find(p=>p.id===$('provider').value).connectionRevision}:{}),model:$('model').value,messages:prepared.messages,...($('output').value?{parameters:{max_output_tokens:Number($('output').value)}}:{})})});
     if(disposed)return;
     if([401,403].includes(response.status)){identityChanged();return;}
     const value=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readChatStream(response,add,m=>{if(!disposed)text(m||'正在生成…');}):await response.json();
@@ -48,7 +48,7 @@ async function generate(retry=false){
 $('form').onsubmit=e=>{e.preventDefault();void generate();};$('retry').onclick=()=>void generate(true);
 async function initialize(){const start=new AbortController(),timer=setTimeout(()=>start.abort(),20000);try{
   const options={credentials:'same-origin',cache:'no-store',signal:start.signal};const session=await fetch('/api/account/session',options);if(!session.ok)throw Error('账户暂时无法确认，请刷新重试。');const identity=await session.json();if(!identity.user?.id)throw Error('请先返回普通聊天登录个人账户，再进入临时聊天。');
-  const response=await fetch('/api/providers',options);if(!response.ok)throw Error('模型列表读取失败，请刷新重试。');const data=await response.json();if(disposed)return;userId=identity.user.id;providers=data.providers||[];limit=data.limits?.maxInputChars||24000;
+  const response=await fetch('/api/providers',{...options,headers:{'x-plaude-client':'1','x-plaude-account-id':identity.user.id}});if(!response.ok)throw Error('模型列表读取失败，请刷新重试。');const data=await response.json();if(disposed)return;userId=identity.user.id;providers=data.providers||[];limit=data.limits?.maxInputChars||24000;
   $('provider').replaceChildren(...providers.map(p=>{const o=document.createElement('option');o.value=p.id;o.textContent=p.label||p.id;return o;}));$('provider').value=data.defaultProvider||providers[0]?.id;modelOptions();ready=!!$('model').value;text(ready?'临时文字聊天已就绪；不读取记忆和通用指令。':'暂无可用模型。');controls();if(ready)$('input').focus();
 }catch(error){if(!disposed){text(start.signal.aborted?'连接超时，请刷新重试。':error.message);controls();}}finally{clearTimeout(timer);}}
 void initialize();
