@@ -3503,7 +3503,7 @@ const executionConsole = initExecutionConsole({
 });
 let modelConnections;
 workspace = initWorkspace({
-  openPersonalConnections:()=>modelConnections?.open(),
+  openPersonalConnections:accountUser?()=>modelConnections?.open():undefined,
   openLogs: executionConsole.openLogs,
   prepareParameters: prepareModelParameters,
   readParameters: readModelParameters,
