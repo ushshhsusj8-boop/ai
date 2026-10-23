@@ -60,6 +60,13 @@ test('account model connections isolate encrypted credentials, versions and mode
     for(const user of [null,b]){const providers=await (await request('/api/providers',user)).text();assert.ok(!providers.includes(sample().id));assert.ok(!providers.includes(sample().apiKey));}
     const providers=await (await request('/api/providers',a)).json();const mine=providers.providers.find(p=>p.id===sample().id);assert.equal(mine.connectionRevision,1);assert.equal(mine.privateConnection,true);assert.ok(!JSON.stringify(providers).includes('models.example.com'));assert.ok(providers.providers.some(p=>p.id==='deepseek'));
   });
+  await t.test('external site-token API neither lists nor resolves personal connections even for a signed-in owner',async()=>{
+    const authorization={authorization:'Bearer qa-gateway-abcdefghijklmnopqrstuvwxyz'};
+    const listed=await request('/v1/models',a,'GET',undefined,authorization);assert.equal(listed.status,200);
+    const models=(await listed.json()).data;assert.ok(models.some(m=>m.id==='deepseek'));assert.ok(models.every(m=>!m.id.startsWith('mine-')));
+    const before=privateCalls.length;const response=await request('/v1/chat/completions',a,'POST',{model:sample().id,messages:[{role:'user',content:'合成外部调用'}]},authorization);
+    assert.equal(response.status,400);assert.match((await response.json()).error.message,/enabled model ID/);assert.equal(privateCalls.length,before);assert.equal(globalCalls,0);
+  });
   await t.test('only the owner can generate, using their exact URL and key, including temporary text chats',async()=>{
     assert.equal((await send(b)).status,409);assert.equal((await send(null)).status,401);assert.equal((await send(a,{connectionRevision:0})).status,409);assert.equal(privateCalls.length,0);
     assert.equal((await send(a)).status,200);assert.equal((await send(a,{temporary:true})).status,200);assert.equal(globalCalls,0);assert.equal(privateCalls.length,2);

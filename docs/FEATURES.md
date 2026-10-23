@@ -55,3 +55,5 @@ The writing canvas supports local editing, Markdown export, explicit account syn
 ## Interface
 
 Compact sidebar and message menus, input tool expansion, light/dark themes, text size, readable Markdown/math, CSV table export, keyboard controls and phone layouts are included. Browser speech recognition depends on browser support and permission; transcription enters a draft for review before sending.
+
+The external API setup panel lists site-token models only. Account-private connections remain available in signed-in normal/temporary chats; their internal IDs and keys are not accepted by the site-token `/v1` API.

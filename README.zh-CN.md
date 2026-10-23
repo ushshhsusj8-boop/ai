@@ -27,7 +27,7 @@ node -e "require('node:fs').writeFileSync('secrets/gateway_access_token',require
 
 ## 验证
 
-运行 `npm run check` 和 `npm test`。初始源码共360项测试；Windows 356通过、4项Linux专属跳过。测试使用临时合成资料和模拟模型，无需真实服务商凭据。仓库提供Windows/Linux CI配置，是否执行通过以实际Actions结果为准。
+运行 `npm run check` 和 `npm test`。初始源码共361项测试；Windows 357通过、4项Linux专属跳过。测试使用临时合成资料和模拟模型，无需真实服务商凭据。仓库提供Windows/Linux CI配置，是否执行通过以实际Actions结果为准。
 
 ## 开源范围
 

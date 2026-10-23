@@ -1894,16 +1894,23 @@ function openApiAccess() {
   elements.apiKeyHelp.textContent = isLoopbackLocation()
     ? "本地访问口令保存在项目的 secrets/gateway_access_token 文件中。请勿将它写进公开代码。"
     : "使用“访问设置”中的网站访问口令。请勿将它写进公开代码。";
+  // /v1 uses the site token and exposes shared providers, not account connections.
+  const apiProviders = state.providers.filter(provider => !provider.privateConnection && !provider.id.startsWith('mine-'));
   elements.apiModelId.replaceChildren();
-  for (const provider of state.providers) {
+  for (const provider of apiProviders) {
     const option = document.createElement("option");
     option.value = provider.id;
     option.textContent = `${provider.label} (${provider.id})`;
     elements.apiModelId.append(option);
   }
-  elements.apiModelId.disabled = state.providers.length === 0;
-  elements.copyApiModelId.disabled = state.providers.length === 0;
-  if (state.providers.some((provider) => provider.id === elements.providerSelect.value)) {
+  if (!apiProviders.length) {
+    const unavailable = new Option('暂无可供外部应用调用的站点模型', '');
+    unavailable.disabled = true;
+    elements.apiModelId.append(unavailable);
+  }
+  elements.apiModelId.disabled = apiProviders.length === 0;
+  elements.copyApiModelId.disabled = apiProviders.length === 0;
+  if (apiProviders.some((provider) => provider.id === elements.providerSelect.value)) {
     elements.apiModelId.value = elements.providerSelect.value;
   }
   elements.apiDialog.showModal();
