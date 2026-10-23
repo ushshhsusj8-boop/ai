@@ -44,7 +44,7 @@ npm run check
 npm test
 ```
 
-The current source contains 357 tests. On Windows, 353 pass and four Linux-specific tests are skipped. Tests use temporary data and mocked model transports. CI is configured for Windows and Linux; a configured workflow is not evidence that a hosted CI run has already passed.
+The current source contains 360 tests. On Windows, 356 pass and four Linux-specific tests are skipped. Tests use temporary data and mocked model transports. CI is configured for Windows and Linux; a configured workflow is not evidence that a hosted CI run has already passed.
 
 ## Data and scope
 

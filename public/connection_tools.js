@@ -26,3 +26,16 @@ export function validateConnection(input) {
   if(typeof input.apiKey!=='string'||input.apiKey.length>4096||/[\x00-\x20\x7f-\uffff]/.test(input.apiKey))throw Error('API Key 须为不含空白的英文字符，最多4096字符。');
   return {id:input.id,label:input.label.trim(),protocol:input.protocol,apiUrl:connectionEndpoint(input.apiUrl,input.protocol),model:input.model,models,vision:input.vision,apiKey:input.apiKey};
 }
+
+// Validate the selected destination before clearing a draft or appending a turn.
+export function chatSelectionProblem(conversation, provider, modelId) {
+  if (!provider?.id) return '当前服务商连接已不可用，请明确选择其他服务商后再发送。';
+  if (conversation?.provider?.startsWith('mine-') && conversation.provider !== provider.id)
+    return '此对话原来的个人连接已不可用，请明确选择其他服务商；草稿已保留。';
+  const models=Array.isArray(provider.models)&&provider.models.length?provider.models:[{id:provider.model}];
+  if (!modelId || !models.some(model=>model?.id===modelId))
+    return '原型号已不可用，请明确选择一个可用型号；草稿已保留。';
+  if (conversation?.provider===provider.id && conversation.model && conversation.model!==modelId)
+    return '当前对话的原型号与选择不一致，请重新选择型号；草稿已保留。';
+  return '';
+}

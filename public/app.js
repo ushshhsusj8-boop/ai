@@ -20,6 +20,7 @@ import {initPersonalInstructions} from './personal_instructions.js';
 import {initPrivateShares} from './private_shares.js';
 "use strict";
 
+import {chatSelectionProblem} from './connection_tools.js';
 import {initModelConnections} from './model_connections.js';
 import { initWorkspace, workspacePreferences } from "./workspace.js";
 import { initWorkbench } from "./workbench.js";
@@ -671,6 +672,15 @@ function modelsFor(provider) {
 }
 
 function syncModelOptions(conversation = activeConversation()) {
+  // A deleted personal endpoint must not inherit another conversation's selection.
+  for(const option of [...elements.providerSelect.options])if(option.dataset.unavailablePersonal&&option.value!==conversation?.provider)option.remove();
+  if(conversation?.provider?.startsWith('mine-')){
+    if(![...elements.providerSelect.options].some(option=>option.value===conversation.provider)){
+      const unavailable=new Option('个人连接已不可用 · 请重新选择',conversation.provider);
+      unavailable.disabled=true;unavailable.dataset.unavailablePersonal='1';elements.providerSelect.prepend(unavailable);
+    }
+    elements.providerSelect.value=conversation.provider;
+  }
   const provider = selectedProvider();
   const models = modelsFor(provider);
   const desired = conversation?.provider === provider?.id ? conversation.model : "";
@@ -682,10 +692,12 @@ function syncModelOptions(conversation = activeConversation()) {
     option.title = model.id;
     elements.modelIdSelect.append(option);
   }
-  elements.modelIdSelect.value = models.some((model) => model.id === desired)
+  const unavailableModel=Boolean(desired&&!models.some(model=>model.id===desired));
+  if(unavailableModel){const unavailable=new Option('原型号已不可用 · 请重新选择',desired);unavailable.disabled=true;elements.modelIdSelect.prepend(unavailable);}
+  elements.modelIdSelect.value = unavailableModel || models.some((model) => model.id === desired)
     ? desired : models[0]?.id || "";
   elements.modelIdSelect.disabled = state.busy || Boolean(activeBackgroundRequest()) || models.length === 0;
-  if (conversation?.provider === provider?.id) {
+  if (!unavailableModel && conversation?.provider === provider?.id) {
     conversation.model = elements.modelIdSelect.value;
     conversation.parameters = parametersForProvider(
       provider,
@@ -693,7 +705,8 @@ function syncModelOptions(conversation = activeConversation()) {
       elements.modelIdSelect.value,
     );
   }
-  elements.modelNote.textContent = modelNoteText(provider, elements.modelIdSelect.value);
+  elements.modelNote.textContent = !provider&&conversation?.provider?.startsWith('mine-')?'个人连接已不可用，请明确选择其他服务商。'
+    :unavailableModel?'原型号已不可用，请明确选择其他型号。':modelNoteText(provider, elements.modelIdSelect.value);
   syncWebSearchControl(conversation);
 }
 
@@ -1542,7 +1555,7 @@ function resizeTextarea() {
 function updateSendState() {
   const backgroundBusy = Boolean(activeBackgroundRequest());
   elements.sendButton.disabled = !state.busy && (
-    (elements.promptInput.value.trim().length === 0 && !visionComposer?.images().length) || state.providers.length === 0 || !selectedProvider()
+    (elements.promptInput.value.trim().length === 0 && !visionComposer?.images().length) || state.providers.length === 0 || Boolean(chatSelectionProblem(activeConversation(),selectedProvider(),elements.modelIdSelect.value))
   );
   elements.sendButton.classList.toggle("cancel", state.busy);
   elements.sendButton.setAttribute("aria-label", state.busy ? state.parallelTasks.get(state.activeId)?.status === 'queued' ? '取消排队' : '停止当前对话生成' : '发送消息');
@@ -2609,6 +2622,8 @@ async function requestConversation(conversation, userMessage, replacementAssista
 }
 
 async function sendMessage(content, images = []) {
+  const selectionIssue=chatSelectionProblem(activeConversation(),selectedProvider(),elements.modelIdSelect.value);
+  if(selectionIssue){showToast(selectionIssue);return;}
   let conversation = ensureConversation();
   if (state.sharedIds.has(conversation.id) && !state.sharedEditKeys[conversation.id]) {
     const copied = await copySharedConversation(conversation);
@@ -2712,6 +2727,8 @@ async function startParallelTaskBatch() {
     showToast("单条并行任务不能超过 6000 字。");
     return;
   }
+  const selectionIssue=chatSelectionProblem(activeConversation(),selectedProvider(),elements.modelIdSelect.value);
+  if(selectionIssue){showToast(selectionIssue);return;}
   const provider = elements.providerSelect.value || state.defaultProvider;
   const model = elements.modelIdSelect.value || "";
   const jobs = prompts.map((prompt) => createParallelConversation(prompt, provider, model));
@@ -3012,6 +3029,8 @@ elements.composer.addEventListener("submit", (event) => {
   const content = elements.promptInput.value.trim() || (images.length ? '请描述并分析图片内容。' : '');
   if (!content || state.providers.length === 0) return;
   const conversation = activeConversation();
+  const selectionIssue=chatSelectionProblem(conversation,selectedProvider(),elements.modelIdSelect.value);
+  if(selectionIssue){showToast(selectionIssue);elements.liveStatus.textContent=selectionIssue;return;}
   try {
     const context = compactMessages([...(conversation?.messages || []), { role: 'user', content, images }], conversation?.context,previewProjectInput(conversation));
     if (context.some(message => message.images?.length)) {

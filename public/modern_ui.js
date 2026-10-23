@@ -89,7 +89,7 @@ export function initModernUI({conversations, active, select, create, openTempora
   for(const id of ['#ui-theme','#ui-density','#ui-text-size','#ui-reading-width'])$(id).onchange=()=>{const next=uiPreferences({theme:$('#ui-theme').value,density:$('#ui-density').value,textSize:Number($('#ui-text-size').value),readingWidth:$('#ui-reading-width').value});try{scopedStorage.setItem('plaude-ui-preferences-v1',JSON.stringify(next));preferences=next;apply();$('#ui-preferences-status').textContent='偏好已保存到此浏览器。';}catch{$('#ui-preferences-status').textContent='浏览器无法保存偏好，原设置保留。';apply();}};
   dark.addEventListener('change',()=>{if(preferences.theme==='system')apply();});apply();
   function refresh(){
-    const model=$('#model-id-select');modelButton.textContent=(model.selectedOptions[0]?.textContent||'选择模型')+' ⌄';modelButton.disabled=model.disabled;modelButton.title=modelButton.textContent;
+    const model=$('#model-id-select');modelButton.textContent=(model.selectedOptions[0]?.textContent||'选择模型')+' ⌄';modelButton.disabled=$('#provider-select').disabled;modelButton.title=modelButton.textContent;
     const conversation=active();document.body.classList.toggle('chat-empty',!conversation?.messages?.length);document.body.classList.toggle('chat-generating',busy());
     web.textContent=$('#web-search-toggle').checked?'联网搜索 · 已开启':'联网搜索';web.setAttribute('aria-pressed',String($('#web-search-toggle').checked));
     webChip.hidden=!$('#web-search-toggle').checked;const project=projects.projectForConversation(conversation?.id);projectChip.hidden=!project;projectChip.textContent=project?'项目 · '+project.name:'';context.hidden=projectChip.hidden&&webChip.hidden;
