@@ -729,8 +729,8 @@ function createConversation() {
     titleEdited: false,
     pinned: false,
     archived: false,
-    provider: elements.providerSelect.value || state.defaultProvider,
-    model: elements.modelIdSelect?.value || "",
+    provider: state.providers.length ? (elements.providerSelect.value || state.defaultProvider) : "",
+    model: state.providers.length ? (elements.modelIdSelect?.value || "") : "",
     parameters: {},
     context: normalizeContextSettings(),
     webSearch: false,
@@ -3432,7 +3432,7 @@ elements.removeToken.addEventListener("click", () => {
 
 // Wait for active chat and cloud work; preserve the imported library until reload.
 window.addEventListener('plaude-before-backup-import', event => {
-  if (state.backgroundRequests.size || privateSync?.running) event.preventDefault();
+  if (state.branchingIds.size || state.regeneratingIds.size || state.backgroundRequests.size || privateSync?.running) event.preventDefault();
 });
 window.addEventListener('plaude-backup-imported', () => {
   state.backupImportPending = true;

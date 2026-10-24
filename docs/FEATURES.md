@@ -59,3 +59,5 @@ Compact sidebar and message menus, input tool expansion, light/dark themes, text
 The external API setup panel lists site-token models only. Account-private connections remain available in signed-in normal/temporary chats; their internal IDs and keys are not accepted by the site-token `/v1` API.
 
 When project inheritance is pending, finishing a regenerated/edit/continue version respects a later chat selection. The new version is kept in history; the active chat, unsent draft and focus stay in place. Staying on the source keeps the existing direct-open workflow.
+
+Backup import also waits for pending project inheritance in regenerated/edit/continue versions, retains the chosen file and draft, and allows an explicit retry after completion or failure. Fresh empty chats wait for a real model list instead of saving loading labels as model IDs; startup edits remain intact. Removed saved models still require explicit reselection.

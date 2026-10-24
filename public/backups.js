@@ -375,7 +375,7 @@ function initBackupDialog() {
     try {
       const text = await file.text();
       if (!window.dispatchEvent(new Event('plaude-before-backup-import', { cancelable: true }))) {
-        throw Error('仍有对话正在生成、排队或同步云端，请等待任务完成后再导入；也可先停止生成。当前聊天和备份文件均保留。');
+        throw Error('仍有对话正在准备、生成、排队或同步云端，请等待任务完成后再导入；已开始的生成也可先停止。当前聊天、草稿和备份文件均保留。');
       }
       const plan = planImport(text, scopedStorage);
       applyImport(plan, scopedStorage);
