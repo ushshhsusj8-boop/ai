@@ -30,10 +30,25 @@ export function createAccountConnections({file,userFor}) {
   function view(id,value=read(id)){return {userId:id,revision:value.revision,connections:value.connections.map(({apiKey,...c})=>({...c,keyConfigured:!!apiKey})),encrypted:true};}
   function save(id,input){
     const previous=read(id);
-    if(!input||Object.keys(input).some(k=>!['revision','connections'].includes(k))||!Array.isArray(input.connections)||input.connections.length>getLimits().connections)fail('每个账户个人连接超过当前数量预算。');
+    if(!input||Object.keys(input).some(k=>!['revision','connections'].includes(k))||!Array.isArray(input.connections))fail('个人连接内容无效。');
     if(input.revision!==previous.revision)fail('连接已在其他设备修改，请先读取云端版本。',409);
-    const ids=new Set(),connections=input.connections.map(raw=>{
-      const c=validateConnection(raw);if(ids.has(c.id))fail('连接编号重复。');ids.add(c.id);
+    const validate=raw=>{try{return validateConnection(raw);}catch(error){fail(error.message);}};
+    const ids=new Set();
+    let candidates=withStoredLimits(()=>{
+      if(input.connections.length>getLimits().connections)fail('个人连接超过存储硬边界。');
+      return input.connections.map(raw=>{const c=validate(raw);if(ids.has(c.id))fail('连接编号重复。');ids.add(c.id);return c;});
+    });
+    const metadata=({apiKey,...c})=>JSON.stringify(c);
+    // Only exact removals may retain old entries above a newly lowered budget.
+    const removing=candidates.length<previous.connections.length&&candidates.every(c=>{
+      const old=previous.connections.find(p=>p.id===c.id);
+      return old&&c.apiKey===''&&metadata(c)===metadata(old);
+    });
+    if(!removing){
+      if(candidates.length>getLimits().connections)fail('每个账户个人连接超过当前数量预算。');
+      candidates=candidates.map(validate);
+    }
+    const connections=candidates.map(c=>{
       const old=previous.connections.find(p=>p.id===c.id);
       if(!c.apiKey){if(!old||old.apiUrl!==c.apiUrl||old.protocol!==c.protocol)fail('新增或修改 API 地址/协议时，请重新填写自己的 API Key。');c.apiKey=old.apiKey;}
       return c;

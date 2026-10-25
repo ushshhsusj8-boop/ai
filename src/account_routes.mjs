@@ -152,7 +152,7 @@ export function createAccountRoutes({ store, administration, config, readJson, s
         return true;
       }
       if(path==='/connections'&&method==='GET'){sendJson(response,200,store.getConnections(id),headers);return true;}
-      if(path==='/connections'&&method==='PUT'){rateLimit('connections:'+id,30,MINUTE);const value=await body(request,Math.max(128*1024,getLimits().memoryTotal*4+getLimits().memoryCount*256,getLimits().connections*getLimits().connectionModels*256));requireSession(request,true);sendJson(response,200,store.putConnections(id,value),headers);return true;}
+      if(path==='/connections'&&method==='PUT'){rateLimit('connections:'+id,30,MINUTE);const value=await body(request,MAXIMUM_LIMITS.connections*(MAXIMUM_LIMITS.connectionModels*256+8192));requireSession(request,true);sendJson(response,200,store.putConnections(id,value),headers);return true;}
       if (path === '/project-files' && method === 'GET') { sendJson(response, 200, store.listOriginals(id), headers); return true; }
       if (path === '/project-files' && method === 'POST') {
         if (originalUploads >= 2) throw error('原文件上传繁忙，请稍后重试。', 503);
