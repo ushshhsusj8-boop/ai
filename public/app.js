@@ -3062,6 +3062,7 @@ elements.composer.addEventListener("submit", (event) => {
   const selectionIssue=chatSelectionProblem(conversation,selectedProvider(),elements.modelIdSelect.value);
   if(selectionIssue){showToast(selectionIssue);elements.liveStatus.textContent=selectionIssue;return;}
   try {
+    validateImages(images);
     const context = compactMessages([...(conversation?.messages || []), { role: 'user', content, images }], conversation?.context,previewProjectInput(conversation));
     if (context.some(message => message.images?.length)) {
       if (!selectedModelSupportsImages()) throw new Error('当前上下文含图片，请选择标有“看图”的型号；也可新建对话或清除上下文后进行纯文字提问。');
