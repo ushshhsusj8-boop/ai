@@ -1,14 +1,16 @@
-import {withStoredLimits} from './site_limits.js';
+import {withStoredLimits,MAXIMUM_LIMITS} from './site_limits.js';
 import {validateWritingNotes} from './writing_store.js';
 
 const KEY='plaude-writing-sync-v1', ID=/^[A-Za-z0-9_-]{8,128}$/;
 const fingerprint=note=>JSON.stringify({title:note.title,text:note.text});
+// JSON can expand one UTF-16 code unit to six characters; retain valid stored baselines.
+const FINGERPRINT_CHARS=(MAXIMUM_LIMITS.writingText+80)*6+32;
 export function createWritingSync({userId,store,storage,fetchImpl=globalThis.fetch,busy=()=>false,
   changed=()=>{},status=()=>{},isCurrent=()=>true,onIdentityChanged=()=>{},requestTimeoutMs=20000}) {
   if(typeof userId!=='string'||!userId)throw Error('请先登录个人账户。');
   let known=Object.create(null),ready=false,running=null,timer,again=false,lastError='';
   const conflicts=new Map();
-  try{const value=JSON.parse(storage.getItem(KEY)||'{}');if(value&&typeof value==='object'&&!Array.isArray(value))for(const [id,record]of Object.entries(value).slice(0,5000))if(ID.test(id)&&Number.isSafeInteger(record?.revision)&&record.revision>0&&typeof record.fingerprint==='string'&&record.fingerprint.length<600000)known[id]=record;}catch{}
+  try{const value=JSON.parse(storage.getItem(KEY)||'{}');if(value&&typeof value==='object'&&!Array.isArray(value))for(const [id,record]of Object.entries(value).slice(0,5000))if(ID.test(id)&&Number.isSafeInteger(record?.revision)&&record.revision>0&&typeof record.fingerprint==='string'&&record.fingerprint.length<=FINGERPRINT_CHARS)known[id]=record;}catch{}
   const persist=()=>storage.setItem(KEY,JSON.stringify(known));
   function identity(){if(!isCurrent())throw Error('账户已改变，未载入或上传文稿。');}
   async function request(path='',options={}) {

@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {once} from 'node:events';
+import {createAccountStore} from '../src/accounts.mjs';
+import {createGatewayServer} from '../src/app.mjs';
+import {createSiteAdministration} from '../src/site_administration.mjs';
+import {loadConfig} from '../src/config.mjs';
+import {withSiteLimits} from '../src/limit_context.mjs';
+import {DEVELOPER_LIMITS} from '../public/site_limits.js';
+import {createWritingStore} from '../public/writing_store.js';
+import {createWritingSync} from '../public/writing_sync.js';
+test('large-note offline edits and deletion cross actual private HTTP routes after reopening while accounts stay isolated',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'plaude-large-writing-http-')),accounts=createAccountStore(join(directory,'accounts.json'));
+ const owner=await accounts.register({username:'qa-large-writing',password:'qa-synthetic-large-password-2026'}),other=await accounts.register({username:'qa-other-writing',password:'qa-synthetic-other-password-2026'});
+ const administration=createSiteAdministration({file:accounts.administrationFile,findUser:accounts.findUserByUsername,requireUser:accounts.requireUser});
+ let calls=0;const config=loadConfig({NODE_ENV:'test',GATEWAY_ACCESS_TOKEN:'qa-large-writing-token-abcdefghijklmnopqrstuvwxyz',DEEPSEEK_API_KEY:'sk-synthetic-abcdefghijklmnopqrstuvwxyz'});
+ const server=createGatewayServer({config,accountStore:accounts,administration,fetchImpl:async()=>{calls++;throw Error('Real models forbidden');}});
+ server.listen(0,'127.0.0.1');await once(server,'listening');const origin='http://127.0.0.1:'+server.address().port;
+ t.after(async()=>{server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});});
+ const transport=(path,o={})=>fetch(origin+path,{...o,headers:{...o.headers,cookie:'plaude_session='+owner.sessionToken,origin}});
+ const data=new Map(),storage={getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,String(v))},store=createWritingStore(storage);
+ const reopen=()=>createWritingSync({userId:owner.user.id,store,storage,fetchImpl:transport});
+ await withSiteLimits(DEVELOPER_LIMITS,async()=>{
+  store.save({id:'large-http-note-0001',title:'合成长文稿',text:'合成'.repeat(320001),revision:0});
+  store.save({id:'large-http-sibling-0001',title:'兄弟文稿',text:'保留',revision:0});assert.equal((await reopen().sync()).synced,true);
+  const first=store.list().find(n=>n.id==='large-http-note-0001');store.save({...first,text:first.text+' offline edit'});assert.equal((await reopen().sync()).synced,true);
+  const remote=accounts.listWriting(owner.user.id).notes.find(n=>n.id===first.id);assert.equal(remote.text,first.text+' offline edit');assert.equal(remote.revision,2);
+  const local=store.list().find(n=>n.id===first.id);store.remove(local.id,local.revision);assert.equal((await reopen().sync()).synced,true);
+  assert.equal(accounts.listWriting(owner.user.id).notes.some(n=>n.id===first.id),false);assert.equal(accounts.listWriting(owner.user.id).deleted.find(n=>n.id===first.id).revision,3);
+  assert.deepEqual(accounts.listWriting(other.user.id).notes,[]);assert.equal(store.list().length,1);assert.equal(calls,0);
+ });
+});
