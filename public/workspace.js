@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import { scopedStorage } from './scoped_storage.js';
 import { parseDocument, formatDocument } from './documents.js';
 import {pdfCoverage} from './pdf_coverage.js';
@@ -43,7 +44,7 @@ export function initWorkspace(callbacks) {
         <p class="ws-help">代理作用于此后端的模型请求与联网搜索。本机 127.0.0.1 指运行后端的电脑；上传云端后指服务器。</p><div class="ws-tool-grid" id="ws-general-tools"></div>
       </section>
       <section class="ws-card" id="ws-appearance"><div class="ws-card-heading"><div><span class="dialog-kicker">外观与预设</span><h3>字体、消息布局与提示词</h3></div><span class="ws-badge">沿用当前配色</span></div><div class="ws-grid"><label>界面字体<select id="ws-font"><option value="default">默认字体</option><option value="system">系统字体</option><option value="serif">衬线字体</option></select></label><label>消息字号<input id="ws-font-size" type="number" min="12" max="22" value="15"></label><label>阅读宽度<select id="ws-width"><option value="comfortable">舒适</option><option value="wide">宽屏</option></select></label><label>发送快捷键<select id="ws-send-key"><option value="enter">Enter 发送，Shift + Enter 换行</option><option value="ctrl-enter">Ctrl / Command + Enter 发送</option></select></label></div><div class="ws-tool-grid" id="ws-appearance-tools"></div></section>
-      <section class="ws-card" id="ws-files"><div class="ws-card-heading"><div><span class="dialog-kicker">文件解析</span><h3>OCR 与文档</h3></div><span class="ws-badge">在浏览器内读取</span></div><p class="ws-help">支持文本、PDF、DOCX、PNG/JPEG/WebP 图片。原始文件不会上传；解析文字经你确认发送后才交给模型。文档或图片最多 5 MiB，PDF 最多 40 页。</p><label>图片识别语言<select id="ws-ocr-language"><option value="chi_sim+eng">简体中文 + 英文</option><option value="eng">英文</option></select></label><label class="ws-file-label">选择文件预览<input id="ws-document-file" type="file" accept=".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp"></label><p id="ws-document-status" role="status" aria-live="polite"></p><label>识别结果（可编辑，最多 6000 字）<textarea id="ws-document-preview" rows="7" maxlength="6000" placeholder="选择文件后会在这里显示文字"></textarea></label><button class="primary-button" id="ws-insert-document" type="button" disabled>插入到消息输入框</button></section>
+      <section class="ws-card" id="ws-files"><div class="ws-card-heading"><div><span class="dialog-kicker">文件解析</span><h3>OCR 与文档</h3></div><span class="ws-badge">在浏览器内读取</span></div><p class="ws-help">支持文本、PDF、DOCX、PNG/JPEG/WebP 图片。原始文件不会上传；解析文字经你确认发送后才交给模型。文档或图片最多 ${getLimits().documentBytes/1048576} MiB，快速预览PDF最多40页，完整解析请用附件或项目资料。</p><label>图片识别语言<select id="ws-ocr-language"><option value="chi_sim+eng">简体中文 + 英文</option><option value="eng">英文</option></select></label><label class="ws-file-label">选择文件预览<input id="ws-document-file" type="file" accept=".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp"></label><p id="ws-document-status" role="status" aria-live="polite"></p><label>识别结果（可编辑，最多 ${getLimits().textAttachmentChars} 字）<textarea id="ws-document-preview" rows="7" maxlength="${getLimits().textAttachmentChars}" placeholder="选择文件后会在这里显示文字"></textarea></label><button class="primary-button" id="ws-insert-document" type="button" disabled>插入到消息输入框</button></section>
     </div></div><footer class="ws-footer"><button class="secondary-button" id="ws-open-logs" type="button">查看运行日志</button><span id="ws-save-status" role="status" aria-live="polite"></span><button class="primary-button" id="ws-save" type="button">保存设置</button><button class="secondary-button" id="ws-cancel" type="button">取消</button></footer>`;
   document.body.append(dialog);
   const $ = selector => dialog.querySelector(selector);
@@ -316,7 +317,7 @@ export function initWorkspace(callbacks) {
     try { const result = await parseDocument(file, { signal: parseController.signal, language: $('#ws-ocr-language').value, progress: text => { $('#ws-document-status').textContent = text; } });
       if (!dialog.open) return;
       parsedName = result.name; $('#ws-document-preview').value = result.text;
-      $('#ws-document-status').textContent = (result.truncated ? `${result.name}：显示前 6000 字，请编辑后插入。` : `${result.name}：解析完成，可编辑后插入。`) + pdfCoverage(result.pdfInfo);
+      $('#ws-document-status').textContent = (result.truncated ? `${result.name}：显示前 ${getLimits().textAttachmentChars} 字，请编辑后插入。` : `${result.name}：解析完成，可编辑后插入。`) + pdfCoverage(result.pdfInfo);
       $('#ws-insert-document').disabled = false;
     } catch (error) { $('#ws-document-status').textContent = error.message || '解析失败。'; } finally { parsing = false; }
   };

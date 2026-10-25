@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import {inspectOriginalBackup,planOriginalRestore} from './original_restore.js';
 export function initOriginalRestorePanel({dialog,parent,run,working,currentAccount,client,accept,projects,status}) {
   const section=document.createElement('section');section.id='project-original-restore';
@@ -18,7 +19,7 @@ export function initOriginalRestorePanel({dialog,parent,run,working,currentAccou
       const plan=planOriginalRestore(baseline,archive.envelope);
       const missing=archive.envelope.files.filter(f=>!projects().some(p=>p.id===f.projectId&&p.documents.some(d=>d.id===f.documentId))).length;
       preview={owner,file,baseline,archive,plan};
-      $('summary').textContent=`已完整校验 ${archive.envelope.files.length} 个原文件，将追加 ${plan.additions.length} 个、跳过 ${plan.skipped} 个相同文件；恢复后 ${plan.total}/60 个、${(plan.usedBytes/1024/1024).toFixed(2)}/64 MiB。${missing} 个原项目或解析资料已不存在，恢复后只在私有保管区显示，不自动关联新项目。`;
+      $('summary').textContent=`已完整校验 ${archive.envelope.files.length} 个原文件，将追加 ${plan.additions.length} 个、跳过 ${plan.skipped} 个相同文件；恢复后 ${plan.total}/${getLimits().originalFiles} 个、${(plan.usedBytes/1024/1024).toFixed(2)}/${getLimits().originalTotalBytes/1048576} MiB。${missing} 个原项目或解析资料已不存在，恢复后只在私有保管区显示，不自动关联新项目。`;
       for(const item of archive.envelope.files){const row=document.createElement('li');row.textContent=`${item.name} · ${(item.size/1024).toFixed(1)} KiB · ${plan.additions.some(a=>a.id===item.id)?'追加恢复':'相同文件跳过'}`;$('items').append(row);}
       $('preview').hidden=false;status(plan.additions.length?'校验完成，请核实恢复预览后确认；尚未上传。':'全部原文件已存在，无须再次恢复。');
     }));

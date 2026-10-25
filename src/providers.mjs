@@ -1,10 +1,11 @@
+import {getLimits} from '../public/site_limits.js';
 import { collectProviderStream } from './provider_stream.mjs';
 import { imageParts } from '../public/image_attachments.js';
-const MAX_SEARCH_SOURCES = 12;
+const MAX_SEARCH_SOURCES = getLimits().searchSources;
 const MAX_SOURCE_URL_CHARS = 2048;
 const MAX_SOURCE_TITLE_CHARS = 240;
 const MAX_SEARCH_QUERY_CHARS = 300;
-const MAX_SEARCH_QUERIES = 8;
+const MAX_SEARCH_QUERIES = getLimits().searchQueries;
 const MAX_SEARCH_SUGGESTIONS_CHARS = 50_000;
 
 function safeWebUrl(value) {
@@ -31,7 +32,7 @@ function normalizeSources(candidates) {
     if (!title) title = new URL(url).hostname;
     sources.push({ title, url });
     seen.add(url);
-    if (sources.length >= MAX_SEARCH_SOURCES) break;
+    if (sources.length >= getLimits().searchSources) break;
   }
   return sources;
 }
@@ -45,7 +46,7 @@ function normalizeSearchQueries(values) {
     if (!query || seen.has(query)) continue;
     queries.push(query);
     seen.add(query);
-    if (queries.length >= MAX_SEARCH_QUERIES) break;
+    if (queries.length >= getLimits().searchQueries) break;
   }
   return queries;
 }
@@ -356,7 +357,7 @@ function requestFor(provider, messages, config, generationParameters = {}, webSe
         ...(webSearch ? {
           tools: [{ type: "web_search" }],
           tool_choice: "required",
-          max_tool_calls: 3,
+          ...(getLimits().toolCalls>0?{max_tool_calls:getLimits().toolCalls}:{}),
           include: ["web_search_call.action.sources"],
         } : {}),
       },
@@ -392,13 +393,13 @@ function requestFor(provider, messages, config, generationParameters = {}, webSe
             type: "openrouter:web_search",
             parameters: {
               engine: "auto",
-              max_results: 5,
-              max_total_results: 10,
-              max_uses: 2,
-              search_context_size: "low",
+              ...(getLimits().searchResults>0?{max_results:getLimits().searchResults}:{}),
+              ...(getLimits().searchTotalResults>0?{max_total_results:getLimits().searchTotalResults}:{}),
+              ...(getLimits().searchUses>0?{max_uses:getLimits().searchUses}:{}),
+              search_context_size: getLimits().searchContext,
             },
           }],
-          max_tool_calls: 3,
+          ...(getLimits().toolCalls>0?{max_tool_calls:getLimits().toolCalls}:{}),
         } : {}),
         ...(provider.id === "gemini" && /^gemini-2\.5-flash(?:$|-)/.test(provider.model)
           ? { reasoning_effort: "none" }

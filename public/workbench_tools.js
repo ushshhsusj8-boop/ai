@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 export function parseModelParameterJson(source, capabilities = {}) {
   let value;
   try { value = JSON.parse(source); } catch { throw Error('JSON 格式不正确，请检查引号、逗号和括号。'); }
@@ -30,7 +31,7 @@ export function messageDetails(message, conversation = {}) {
     characters: Array.from(message.content || '').length };
 }
 
-export function appendDraftText(current, addition, limit = 12000) {
+export function appendDraftText(current, addition, limit = getLimits().promptChars) {
   const next = current + (current.trim() ? '\n\n' : '') + addition;
   if (next.length > limit) throw Error(`内容超过 ${limit} 字，请缩短文件文字后再插入。`);
   return next;

@@ -284,7 +284,7 @@ export function loadConfig(environment = process.env) {
     defaultProvider,
     maxOutputTokens: integer(environment, "MAX_OUTPUT_TOKENS", 0, 0, Number.MAX_SAFE_INTEGER),
     systemPrompt:
-      environment.SYSTEM_PROMPT?.trim() || "You are a concise and helpful assistant.",
+      environment.SYSTEM_PROMPT?.trim() || "You are a helpful assistant.",
     allowedOrigins: parseOrigins(environment.ALLOWED_ORIGINS),
     rateLimitPerMinute: integer(environment, "RATE_LIMIT_PER_MINUTE", 10, 1, 600),
     maxRateLimitBuckets: integer(environment, "MAX_RATE_LIMIT_BUCKETS", 2048, 16, 100000),

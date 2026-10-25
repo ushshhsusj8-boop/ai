@@ -1,3 +1,4 @@
+import {MAXIMUM_LIMITS} from './site_limits.js';
 // Text edits only. Each page owns a separate slot, so concurrent tabs cannot overwrite drafts.
 const ROOT = 'plaude-project-editor-v1:';
 const ID = /^[A-Za-z0-9_-]{8,128}$/;
@@ -9,7 +10,7 @@ export function createProjectDraftStore({ userId = '', storage, writerId = crypt
     return value?.version === 1 && value.owner === userId && typeof value.projectId === 'string' && ID.test(value.projectId)
       && Number.isSafeInteger(value.revision) && value.revision >= 0 && Number.isSafeInteger(value.updatedAt)
       && ['name','baselineName'].every(key => typeof value[key] === 'string' && value[key].length <= 60)
-      && ['instructions','baselineInstructions'].every(key => typeof value[key] === 'string' && value[key].length <= 2000);
+      && ['instructions','baselineInstructions'].every(key => typeof value[key] === 'string' && value[key].length <= MAXIMUM_LIMITS.instructionChars);
   }
   function read(key) {
     if (typeof key !== 'string' || !key.startsWith(prefix)) throw Error('无权读取其他账户的项目草稿。');

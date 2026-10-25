@@ -1,3 +1,5 @@
+import {getLimits,MAXIMUM_LIMITS} from '../public/site_limits.js';
+import {withSiteLimits} from './limit_context.mjs';
 import {createConnectionNetwork} from './connection_network.mjs';
 import { callCodeRunner, validateCodeJob } from './code_execution.mjs';
 import {validateCodeArtifacts} from '../public/code_artifact_tools.js';
@@ -18,6 +20,8 @@ import { retrieveDocuments } from './document_retrieval.mjs';
 const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 const STATIC_FILES = new Map([
+  ['/site_limits.js',['../public/site_limits.js','text/javascript; charset=utf-8']],
+  ['/site_administration.js',['../public/site_administration.js','text/javascript; charset=utf-8']],
   ["/connection_tools.js", ["../public/connection_tools.js", "text/javascript; charset=utf-8"]],
   ["/model_connections.js", ["../public/model_connections.js", "text/javascript; charset=utf-8"]],
   ["/share", ["../public/share.html", "text/html; charset=utf-8"]],
@@ -271,12 +275,12 @@ function validateChatInstructions(value) {
   if (value === undefined) return "";
   if (typeof value !== "string") throw new Error("instructions must be text");
   const instructions = value.trim();
-  if (instructions.length > 2000) throw new Error("instructions are too long");
+  if (instructions.length > getLimits().instructionChars) throw new Error("instructions are too long");
   return instructions;
 }
 
 function validateMessages(value, maxInputChars, instructionLength = 0) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 24) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > getLimits().maxMessages) {
     throw new Error("messages must contain between 1 and 24 items");
   }
 
@@ -297,7 +301,7 @@ function validateMessages(value, maxInputChars, instructionLength = 0) {
   });
 
   if (totalCharacters > maxInputChars) throw new Error("Conversation is too long");
-  if (messages.reduce((sum, m) => sum + (m.images?.length || 0), 0) > MAX_CONTEXT_IMAGES) throw new Error('一次请求最多携带 8 张图片，请减少历史上下文或新建对话。');
+  if (messages.reduce((sum, m) => sum + (m.images?.length || 0), 0) > getLimits().contextImages) throw new Error('一次请求最多携带 8 张图片，请减少历史上下文或新建对话。');
   if (messages.at(-1).role !== "user") throw new Error("The last message must be from the user");
   return messages;
 }
@@ -439,7 +443,7 @@ function sendOpenAIError(response, status, message, headers = {}, code = null) {
 }
 
 function validateOpenAIMessages(value, maxInputChars) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 24) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > getLimits().maxMessages) {
     throw new Error("messages must contain between 1 and 24 items");
   }
 
@@ -482,8 +486,9 @@ function selectOpenAIProvider(body, config) {
   return config.providers[body.model];
 }
 
-export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, workspaceStore, accountStore, runCode = callCodeRunner, connectionNetwork = createConnectionNetwork() }) {
-  const accountRoutes = accountStore && createAccountRoutes({store: accountStore, config, readJson, sendJson, clientIp: req => clientIp(req, config)});
+export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, workspaceStore, accountStore, administration, runCode = callCodeRunner, connectionNetwork = createConnectionNetwork() }) {
+  if(administration){const base=config;const names=['rateLimitPerMinute','dailyRequestLimit','dailyTokenLimit','maxConcurrentRequests','requestTimeoutMs','maxInputChars','maxBodyBytes'];config=new Proxy({},{get:(_target,key)=>names.includes(key)?getLimits()[key]:Reflect.get(base,key),ownKeys:()=>Reflect.ownKeys(base),getOwnPropertyDescriptor:()=>({configurable:true,enumerable:true})});}
+  const accountRoutes = accountStore && createAccountRoutes({store: accountStore, administration, config, readJson, sendJson, clientIp: req => clientIp(req, config)});
   function validAccount(request) {
     const session = accountRoutes?.authenticate(request);
     const origin = requestOriginContext(request, config);
@@ -513,6 +518,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
   let dailyTokens = { date: "", used: 0 };
 
   function consumeRateLimit(ip) {
+    if(config.rateLimitPerMinute===0)return{allowed:true,remaining:0,resetSeconds:0};
     const now = Date.now();
     let bucketKey = ip;
     if (!rateBuckets.has(bucketKey) && rateBuckets.size >= config.maxRateLimitBuckets - 1) {
@@ -553,7 +559,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
   function tokenStatus() {
     const resetSeconds = utcDayState(dailyTokens);
     return {
-      allowed: dailyTokens.used < config.dailyTokenLimit,
+      allowed: config.dailyTokenLimit===0 || dailyTokens.used < config.dailyTokenLimit,
       used: dailyTokens.used,
       remaining: Math.max(0, config.dailyTokenLimit - dailyTokens.used),
       resetSeconds,
@@ -580,13 +586,13 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
 
   function consumeDailyRequest() {
     const resetSeconds = utcDayState(dailyRequests);
-    if (dailyRequests.count >= config.dailyRequestLimit) {
+    if (config.dailyRequestLimit>0 && dailyRequests.count >= config.dailyRequestLimit) {
       return { allowed: false, remaining: 0, resetSeconds };
     }
     dailyRequests.count += 1;
     return {
       allowed: true,
-      remaining: config.dailyRequestLimit - dailyRequests.count,
+      remaining: config.dailyRequestLimit===0?0:config.dailyRequestLimit - dailyRequests.count,
       resetSeconds,
     };
   }
@@ -999,7 +1005,9 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
     }
   }
 
-  const server = createServer(async (request, response) => {
+  const server = createServer((request,response)=>{
+    let limits;try{limits=administration?.limits();}catch{sendJson(response,503,{error:'站点权限或额度配置暂时不可用，原资料保留。'});return;}
+    return withSiteLimits(limits,async()=>{
     const url = new URL(request.url || "/", "http://backend.local");
     const started = Date.now();
     requestOwners.set(request, accountRoutes?.authenticate(request)?.user.id || null);
@@ -1016,6 +1024,10 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
     response.once('finish', () => recordRequest(false));
     response.once('close', () => { if (!response.writableEnded) recordRequest(true); });
     const cors = originPolicy(request, config);
+    if(url.pathname==='/api/site-policy'){
+      if(request.method!=='GET'){sendJson(response,405,{error:'Method not allowed'},{allow:'GET'});return;}
+      sendJson(response,200,{limits:getLimits()},{'cache-control':'no-store'});return;
+    }
     if (!cors.allowed) {
       if (url.pathname.startsWith("/v1/")) {
         sendOpenAIError(response, 403, "Origin is not allowed");
@@ -1059,7 +1071,7 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
       if (!consumeRateLimit(clientIp(request, config)).allowed) { sendJson(response, 429, { error: '请求过于频繁，请稍后重试。' }); return; }
       if (codeBusy) { sendJson(response, 429, { error: '代码服务繁忙，请稍后重试。' }); return; }
       utcDayState(codeDay);
-      if (codeDay.count >= 200) { sendJson(response, 429, { error: '今日代码运行次数已达 200 次。' }); return; }
+      if (getLimits().dailyCodeRuns>0 && codeDay.count >= getLimits().dailyCodeRuns) { sendJson(response, 429, { error: '今日代码运行次数已达 200 次。' }); return; }
       const requestId = randomUUID(), controller = new AbortController();
       codeBusy = true;
       codeBusyOwner = ownerOf(request);
@@ -1187,8 +1199,8 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
       }
       try { sendJson(response, 200, {
         defaultProvider: config.defaultProvider,
-        concurrentRequests: Math.min(2, config.maxConcurrentRequests),
-        limits: {maxInputChars: config.maxInputChars, maxMessages: 24},
+        concurrentRequests: config.maxConcurrentRequests,
+        limits: {maxInputChars: config.maxInputChars, maxMessages: getLimits().maxMessages},
         providers: publicProviders(validAccount(request)?{...config,providers:{...config.providers,...Object.fromEntries(accountStore.connectionProviders(validAccount(request).user.id).map(p=>[p.id,p]))}}:config),
         features: {
           sharedConversations: Boolean(sharedStore),
@@ -1264,9 +1276,10 @@ export function createGatewayServer({ config, fetchImpl = fetch, sharedStore, wo
     }
 
     sendJson(response, 404, { error: "Not found" });
+    }).catch(()=>{if(!response.headersSent)sendJson(response,500,{error:'请求暂时无法完成，原资料保留。'});else response.destroy();});
   });
 
-  server.requestTimeout = config.requestTimeoutMs + 10_000;
+  server.requestTimeout = (administration?MAXIMUM_LIMITS.requestTimeoutMs:config.requestTimeoutMs) + 10_000;
   server.headersTimeout = 15_000;
   server.keepAliveTimeout = 5_000;
   return server;

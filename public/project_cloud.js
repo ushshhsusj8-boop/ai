@@ -1,10 +1,11 @@
+import {withStoredLimits} from './site_limits.js';
 import { validateProjects } from './projects.js';
 
 const endpoint = '/api/account/projects';
 const offlineMessage = '云端项目暂时无法连接；当前显示此账户的离线缓存。修改需要联网，未保存的内容请先复制保留。';
 function envelope(value) {
   if (!value || !Number.isSafeInteger(value.revision) || value.revision < 0) throw Error('云端项目版本无效，请刷新重试。');
-  return { projects: validateProjects(value.projects), revision: value.revision };
+  return { projects: withStoredLimits(()=>validateProjects(value.projects)), revision: value.revision };
 }
 
 // This database is deliberately separate from the original, local-only project library.

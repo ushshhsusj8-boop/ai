@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import {validateConnection} from './connection_tools.js';
 
 export function initModelConnections({user,reloadProviders,toast,identityChanged,busy=()=>false}) {
@@ -15,7 +16,7 @@ export function initModelConnections({user,reloadProviders,toast,identityChanged
     <p class="context-help">可填服务的 Base URL，保存时补全对应协议路径；仅支持公网 HTTPS，不接受内网、本机地址或跳转。没有固定的服务商名单。</p>
     <label for="connections-key">你的 API Key</label><input id="connections-key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false">
     <p id="connections-key-note" class="context-help"></p>
-    <label for="connections-models">模型 ID（每行一个，最多24个；第一行为默认模型）</label><textarea id="connections-models" rows="4" maxlength="4700" required spellcheck="false" placeholder="填写服务商提供的模型 ID"></textarea>
+    <label for="connections-models">模型 ID（每行一个，最多${getLimits().connectionModels}个；第一行为默认模型）</label><textarea id="connections-models" rows="4" maxlength="${getLimits().connectionModels*193}" required spellcheck="false" placeholder="填写服务商提供的模型 ID"></textarea>
     <label><input id="connections-vision" type="checkbox"> 服务商已确认这些模型支持图片输入</label>
     <p>选择此连接提问时，消息和你已启用的记忆、指令、资料或图片会发送到填写的服务，请确认服务可信。保存连接不会调用模型。密钥在服务器加密保管，页面不会读回密钥，也不写入浏览器存储或聊天备份。</p>
     <div class="project-actions"><button type="submit" class="primary-button" id="connections-save">保存连接</button><button type="button" class="text-button" id="connections-delete">删除此连接</button></div></form></div></div>`;
@@ -29,7 +30,7 @@ export function initModelConnections({user,reloadProviders,toast,identityChanged
   function clearKey(){$('key').value='';}
   function controls(){
     for(const input of dialog.querySelectorAll('input,select,textarea,button'))input.disabled=working;
-    $('new').disabled=working||!loaded||base.connections.length>=12;
+    $('new').disabled=working||!loaded||base.connections.length>=getLimits().connections;
     $('save').disabled=working||!loaded;$('delete').hidden=!base?.connections.some(c=>c.id===selected);
   }
   function edit(id){

@@ -2,7 +2,7 @@
 
 ## Personal model URLs and keys
 
-Every signed-in account can open 设置 → 我的模型连接 · 自定义 URL to add, edit or delete its own URL, API key and model IDs. There is no fixed provider list. Use a public HTTPS Base URL or a complete OpenAI-compatible Chat Completions/Responses endpoint; the matching path is normalized on save. Up to 12 connections and 24 models per connection are supported. Saving does not call a model. Select the saved “我的” provider at the top of normal or temporary chat to send a question.
+Every signed-in account can open 设置 → 我的模型连接 · 自定义 URL to add, edit or delete its own URL, API key and model IDs. There is no fixed provider list. Use a public HTTPS Base URL or a complete OpenAI-compatible Chat Completions/Responses endpoint; the matching path is normalized on save. The developer preset supports 100 connections and 128 models per connection; administrators can configure these budgets. Saving does not call a model. Select the saved “我的” provider at the top of normal or temporary chat to send a question.
 
 Keys and connection contents are encrypted per account on the server and keys never return to the form, browser storage or chat request body. An unchanged endpoint may retain a blank key field; changing URL/protocol requires reentering your own key. Revision conflicts preserve drafts. Another account cannot view or use the connection. Deleting it preserves chat and does not silently reroute its next question. Existing shared providers remain available. When a saved endpoint or model disappears, its old selection remains marked unavailable. Reopening the chat cannot reuse another conversation's provider or pick the first remaining model. Send, Enter and parallel submissions are blocked before clearing drafts. The top model menu remains available for an explicit replacement, which opens a new conversation while preserving the original. Only enable images when the provider confirms support; submitted context follows that provider's retention policy and billing.
 
@@ -10,7 +10,7 @@ Private connections use direct public HTTPS with certificate checks. Local/priva
 
 ## Revocable read-only text shares
 
-Open input tools → 分享当前对话, or 设置 → 只读分享与撤销. All messages start unchecked. Select text, review the complete local preview, then confirm to upload a frozen snapshot with a 1-, 7- or 30-day expiry (default 7). Attachments, source IDs, account/project settings and later messages are excluded; personal information already in selected text still needs review. Limits: 100 messages/128 KiB per snapshot, 20 records/2 MiB per account and 8 MiB globally. Revoke expired records to free slots. Oversized snapshots are rejected rather than truncated.
+Open input tools → 分享当前对话, or 设置 → 只读分享与撤销. All messages start unchecked. Select text, review the complete local preview, then confirm to upload a frozen snapshot with a 1-, 7- or 30-day expiry (default 7). Attachments, source IDs, account/project settings and later messages are excluded; personal information already in selected text still needs review. Developer-preset budgets are 1,000 messages/1 MiB per snapshot and 100 records/32 MiB per account. Administrator settings and a finite global storage envelope apply. Revoke expired records to free slots. Oversized snapshots are rejected rather than truncated.
 
 Anyone holding the link can read it without signing in. Its random 256-bit secret is in the URL fragment, sent only in a request header without cookies; the server stores its SHA-256 digest. The link is displayed only after creation and cannot be recovered from the list. Revoke it from the account manager to deny future reads and remove the current snapshot. Already read/copied content and historical backups cannot be recalled. After restoring a full old server backup, review and revoke any restored shares. Normal deployment or code rollback must preserve current state. Public pages use no-store responses and revalidate on cached-page return or visibility changes.
 
@@ -26,25 +26,25 @@ Streaming retains received text after stopping or disconnecting. A retry is expl
 
 ## Account-wide instructions
 
-Use 设置 → 账户通用指令 to save default response preferences (up to 2,000 characters) for this account. Each conversation can opt out in 上下文范围. The server resolves the authenticated account and revision; a stale version is rejected before model access. Instructions are included in the input budget. Failed reads preserve the question; conflicting writes preserve the draft. Specific project, conversation and user requests take precedence over these defaults. Clearing and saving removes the text; pausing retains it. Conversation JSON contains only the opt-out switch; copy instruction text separately or privately back up the complete server state.
+Use 设置 → 账户通用指令 to save default response preferences (16,000 characters in the developer preset; configurable) for this account. Each conversation can opt out in 上下文范围. The server resolves the authenticated account and revision; a stale version is rejected before model access. Instructions are included in the input budget. Failed reads preserve the question; conflicting writes preserve the draft. Specific project, conversation and user requests take precedence over these defaults. Clearing and saving removes the text; pausing retains it. Conversation JSON contains only the opt-out switch; copy instruction text separately or privately back up the complete server state.
 
 ## Accounts and explicit memory
 
 Accounts separate private conversations, projects and other cloud data. Legacy shared conversation support is separate and never makes a new private account conversation public automatically.
 
-Use 设置 → 长期记忆, or 保存为记忆 on a message, to review and explicitly save reusable background. No automatic scan or summarization of old chats is performed. The limits are 40 entries, 500 characters per entry and 12,000 characters total. A request selects up to eight entries and 4,000 formatted characters. Global and per-conversation switches are available. Editing a paused entry preserves its paused state.
+Use 设置 → 长期记忆, or 保存为记忆 on a message, to review and explicitly save reusable background. No automatic scan or summarization of old chats is performed. The developer preset stores up to 500 entries, 4,000 characters per entry and 1,000,000 characters total. It selects up to 32 entries and 32,000 formatted characters per request. Administrators can configure these budgets. Global and per-conversation switches are available. Editing a paused entry preserves its paused state.
 
 Memory JSON import previews a merge before confirmation. Replacing the selected file cancels the old preview; a rejected replacement cannot confirm the previous file. Memory export is separate from conversation JSON.
 
 ## Projects and documents
 
-Project instructions and enabled documents are shared only with associated conversations. A project holds up to three parsed documents; conversation/project retrieval jointly respects the document limit. Per file: up to 5 MiB and 120,000 parsed characters; PDF limit: 200 pages. Scanned/mixed PDFs display coverage and allow selected-page OCR, up to 20 pages per operation. OCR and supported file parsing run in the browser using locally served assets.
+Project instructions and enabled documents are shared only with associated conversations. The developer preset supports ten parsed documents with joint conversation/project retrieval, 20 MiB and 1,000,000 parsed characters per file, 1,000 PDF pages and up to 100 explicitly selected OCR pages per operation. Administrators can configure these budgets. Scanned/mixed PDFs display coverage. OCR and supported file parsing run in the browser using locally served assets.
 
 Search opens saved page/section snapshots with literal highlights. Citations refer to saved excerpts. Updates affect future requests, not already saved responses.
 
 ## Original files and backups
 
-Original files require a separate explicit upload to the authenticated private vault. Account limits: 60 files and 64 MiB total; a ZIP restore archive is limited to 65 MiB. Restore validates the full archive, displays a preview and waits for confirmation. Identical files are skipped; conflicts reject the batch and keep existing files. A missing project is not recreated or guessed.
+Original files require a separate explicit upload to the authenticated private vault. The developer preset permits 500 files, 20 MiB per file and 128 MiB per account, with 129 MiB ZIP archives. These budgets are configurable. Restore validates the full archive, displays a preview and waits for confirmation. Identical files are skipped; conflicts reject the batch and keep existing files. A missing project is not recreated or guessed.
 
 Original-file ZIPs contain original files only. Projects, parsed text, conversations, explicit memories and code-history backups have separate formats. Keep the complete private server state for disaster recovery. No source repository is a backup of user data.
 
@@ -61,3 +61,10 @@ The external API setup panel lists site-token models only. Account-private conne
 When project inheritance is pending, finishing a regenerated/edit/continue version respects a later chat selection. The new version is kept in history; the active chat, unsent draft and focus stay in place. Staying on the source keeps the existing direct-open workflow.
 
 Backup import also waits for pending project inheritance in regenerated/edit/continue versions, retains the chosen file and draft, and allows an explicit retry after completion or failure. Fresh empty chats wait for a real model list instead of saving loading labels as model IDs; startup edits remain intact. Removed saved models still require explicit reselection.
+
+
+## Developer budgets and cleanup
+
+See [owner setup and budgets](DEVELOPER_ADMIN.md). Developer presets remove extra daily request/token/code-run soft quotas and the previous fixed two-search/three-tool cap. A zero tool budget delegates to the provider; it does not promise unlimited or free calls. Provider/model windows, output limits, balances, input/resource bounds, public-network restrictions and runner isolation still apply.
+
+Reducing a budget preserves existing drafts and stored data. Old prompt libraries remain readable/exportable and can be reduced by exact-subset deletion. Memory supports explicit pause, disable and deletion while keeping retained text; current per-request memory bounds still apply. Existing long account instructions can be disabled without changing their text. Old original files and writing notes can be deleted incrementally. Revoke an old share even when retained snapshots are still over a lowered account budget. New writes, imports, edits and re-enabling remain subject to current business validation. HTTP envelopes retain finite hard limits and authenticated revision checks. These operations do not automatically delete data or grant access to other accounts.

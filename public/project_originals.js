@@ -1,4 +1,5 @@
-export const ORIGINAL_LIMITS = Object.freeze({maxFiles: 60, maxFileBytes: 5 * 1024 * 1024, maxTotalBytes: 64 * 1024 * 1024});
+import {limitObject,withStoredLimits,MAXIMUM_LIMITS} from './site_limits.js';
+export const ORIGINAL_LIMITS = limitObject({maxFiles:'originalFiles',maxFileBytes:'originalFileBytes',maxTotalBytes:'originalTotalBytes'});
 const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 export function originalName(name) {
   if (typeof name !== 'string' || !name || name.length > 200 || /[\\/\x00-\x1f\x7f]/.test(name) || !/\.(pdf|docx|txt|md|csv|json)$/i.test(name)) throw Error('原文件支持 PDF、DOCX、TXT、MD、CSV、JSON，请选择有效文件名。');
@@ -27,8 +28,8 @@ export function createProjectOriginalClient({userId, currentAccount = () => glob
       const response = await fetchImpl('/api/account/project-files' + path, {method, body, signal: controller.signal, credentials: 'same-origin', cache: 'no-store', headers: {'x-plaude-account-id': userId, ...(method === 'GET' ? {} : {'x-plaude-client': '1'}), ...(body ? {'content-type': 'application/octet-stream'} : {})}});
       checkIdentity();
       if (!response.ok) { const data = await response.json().catch(() => ({})); checkIdentity(); throw Object.assign(Error(response.status === 401 ? '请先登录个人账户。' : response.status === 403 ? '账户已切换或没有权限，请重新打开项目。' : data.error || '原文件操作失败，已有资料保留。'), {status: response.status}); }
-      if (path.startsWith('/')&&!path.startsWith('/restore')) { if(path.startsWith('/export')){const size=Number(response.headers.get('content-length'));if(!Number.isSafeInteger(size)||size<22||size>MAX_ORIGINAL_ZIP_BYTES)throw Error('原文件备份响应大小无效。');} const blob = await response.blob(); checkIdentity(); return blob; }
-      const value = await response.json(); checkIdentity(); return validateOriginalFiles(value, userId);
+      if (path.startsWith('/')&&!path.startsWith('/restore')) { if(path.startsWith('/export')){const size=Number(response.headers.get('content-length'));if(!Number.isSafeInteger(size)||size<22||size>MAXIMUM_LIMITS.originalZipBytes)throw Error('原文件备份响应大小无效。');} const blob = await response.blob(); checkIdentity(); return blob; }
+      const value = await response.json(); checkIdentity(); return withStoredLimits(()=>validateOriginalFiles(value, userId));
     } catch (e) { if (controller.signal.aborted) throw Error(`原文件操作已取消或等待超过${timeoutMs/1000}秒；请刷新列表核实后再重试。`); if(path.startsWith('/export')&&e instanceof TypeError)throw Error('备份下载中断，未提供不完整文件；请联网后重新导出。'); throw e; }
     finally { clearTimeout(timeout); signal?.removeEventListener('abort', cancel); }
   }
@@ -39,14 +40,14 @@ export function createProjectOriginalClient({userId, currentAccount = () => glob
       return request('/restore?'+new URLSearchParams({snapshot}),{method:'POST',body:blob,signal,timeoutMs:120000});
     },
     async export(envelope,{signal,progress=()=>{}}={}) {
-      envelope=validateOriginalFiles(envelope,userId);checkIdentity();
+      envelope=withStoredLimits(()=>validateOriginalFiles(envelope,userId));checkIdentity();
       const snapshot=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(originalSnapshotText(envelope.files))))].map(b=>b.toString(16).padStart(2,'0')).join('');
       progress('正在下载当前账户原文件备份…');const blob=await request('/export?'+new URLSearchParams({snapshot}),{signal,timeoutMs:120000});
-      await verifyOriginalZip(blob,envelope,{progress,check:()=>{checkIdentity();if(signal?.aborted)throw Error('已取消整批备份，未提供下载。');}});
+      await verifyOriginalZip(blob,envelope,{allowStored:true,progress,check:()=>{checkIdentity();if(signal?.aborted)throw Error('已取消整批备份，未提供下载。');}});
       checkIdentity();return new Blob([blob],{type:'application/zip'});
     },
     upload: ({projectId, documentId, file, signal}) => {
-      originalName(file?.name); if (!file.size || file.size > ORIGINAL_LIMITS.maxFileBytes) throw Error('原文件必须大于0且不超过5 MiB。');
+      originalName(file?.name); if (!file.size || file.size > ORIGINAL_LIMITS.maxFileBytes) throw Error('原文件必须大于0且不超过当前单文件容量。');
       return request('?' + new URLSearchParams({projectId, documentId, name: file.name}), {method: 'POST', body: file, signal});
     },
     remove: async id => {

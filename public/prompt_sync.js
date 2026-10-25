@@ -1,4 +1,5 @@
-import {loadPromptLibrary,savePromptLibrary,validatePromptLibrary,createPrompt} from './prompt_library.js';
+import {withStoredLimits} from './site_limits.js';
+import {loadPromptLibrary,savePromptLibrary,validatePromptLibrary,validatePromptChange,createPrompt} from './prompt_library.js';
 
 export const PROMPT_CLOUD_KEY='plaude-prompt-cloud-v1';
 const fingerprint=prompts=>JSON.stringify(prompts);
@@ -7,7 +8,8 @@ export function createPromptSync({userId,storage,fetchImpl=globalThis.fetch,isCu
   busy=()=>false,changed=()=>{},status=()=>{},onIdentityChanged=()=>{},requestTimeoutMs=20000}) {
   let ready=false,running=null,conflict=false,lastError='',timer,again=false;
   function identity(){if(!isCurrent())throw Error('账户已改变，本机提示词保留。');}
-  function read(){
+  function read(){return withStoredLimits(readStored);}
+  function readStored(){
     identity();const raw=storage.getItem(PROMPT_CLOUD_KEY);if(raw===null)return null;
     const value=JSON.parse(raw);
     if(value?.version!==1||!Number.isSafeInteger(value.revision)||value.revision<0)throw Error('本机提示词版本无效，请先导出备份。');
@@ -30,7 +32,7 @@ export function createPromptSync({userId,storage,fetchImpl=globalThis.fetch,isCu
       if([401,403].includes(response.status)){onIdentityChanged();throw Error('登录状态已改变，请重新登录。');}
       if(!response.ok)throw Object.assign(Error(value.error||'提示词云同步失败'),{status:response.status});
       if(value.userId!==userId||!Number.isSafeInteger(value.revision)||value.revision<0)throw Error('云端身份或版本不匹配。');
-      return{revision:value.revision,prompts:validatePromptLibrary(value.prompts)};
+      return{revision:value.revision,prompts:withStoredLimits(()=>validatePromptLibrary(value.prompts))};
     }catch(error){if(controller.signal.aborted)throw Error('提示词云同步超时，请重试。');throw error;}finally{clearTimeout(timeout);}
   }
   function adopt(remote){const previous=read();write({version:1,...remote,base:remote.prompts,migrated:previous?.migrated===true});conflict=false;changed();}
@@ -59,8 +61,9 @@ export function createPromptSync({userId,storage,fetchImpl=globalThis.fetch,isCu
     running=(async()=>{let rounds=0;try{do{again=false;await perform();rounds++;}while(again&&!conflict&&rounds<3);lastError='';}catch(error){lastError=error.message;}finally{running=null;}return report();})();report();return running;
   }
   function save(prompts,expected){
-    const next=validatePromptLibrary(prompts),value=read();
-    if(fingerprint(list())!==fingerprint(expected))throw Error('提示词库已在其他窗口更新，本次编辑未覆盖；请复制编辑文字后重新打开。');
+    const value=read(),current=list();
+    if(fingerprint(current)!==fingerprint(expected))throw Error('提示词库已在其他窗口更新，本次编辑未覆盖；请复制编辑文字后重新打开。');
+    const {prompts:next}=validatePromptChange(prompts,current);
     if(value)write({...value,prompts:next});else savePromptLibrary(storage,next);
     conflict=false;lastError='';again=true;report();clearTimeout(timer);timer=setTimeout(()=>void sync(),500);return next;
   }

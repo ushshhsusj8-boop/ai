@@ -1,8 +1,9 @@
+import {getLimits} from './site_limits.js';
 import { getStorageScope } from './scoped_storage.js';
 const DATABASE = 'plaude-code-history-v1';
-export const HISTORY_LIMIT = 100;
-export const HISTORY_BYTES = 8 * 1024 * 1024;
-export const HISTORY_IMPORT_BYTES = 10 * 1024 * 1024;
+export const HISTORY_LIMIT = getLimits().historyCount;
+export const HISTORY_BYTES = getLimits().historyBytes;
+export const HISTORY_IMPORT_BYTES = getLimits().historyBytes+2*1024*1024;
 const bytes = value => new TextEncoder().encode(value).length;
 const STATUSES = new Set(['completed', 'failed', 'timeout', 'output_limit', 'cancelled', 'interrupted']);
 
@@ -20,7 +21,7 @@ export function validateExecutionRecord(record) {
 }
 export function checkHistoryCapacity(records, candidate) {
   const remaining = records.filter(record => record.localId !== candidate.localId);
-  if (remaining.length >= HISTORY_LIMIT || bytes(JSON.stringify([...remaining, candidate])) > HISTORY_BYTES) throw Error('本机运行历史已满（最多 100 条 / 8 MiB）。旧记录仍保留；请先下载并删除不需要的记录，再保存当前结果。');
+  if (remaining.length >= getLimits().historyCount || bytes(JSON.stringify([...remaining, candidate])) > getLimits().historyBytes) throw Error('本机运行历史已满（超过当前条数或字节预算）。旧记录仍保留；请先下载并删除不需要的记录，再保存当前结果。');
 }
 const RECORD_FIELDS = new Set(['localId','createdAt','id','language','code','stdin','status','stdout','stderr','exitCode','durationMs','resultReceived','error']);
 function importRecord(record) {
@@ -30,18 +31,18 @@ function importRecord(record) {
   return validateExecutionRecord(record);
 }
 export function parseHistoryBackup(text) {
-  if (typeof text !== 'string' || bytes(text) > HISTORY_IMPORT_BYTES) throw Error('运行历史备份最多 10 MiB。');
+  if (typeof text !== 'string' || bytes(text) > getLimits().historyBytes+2*1024*1024) throw Error('运行历史备份最多 10 MiB。');
   let data; try { data = JSON.parse(text.replace(/^\uFEFF/, '')); } catch { throw Error('请选择有效的运行历史 JSON 备份。'); }
   if (!data || Array.isArray(data) || data.version !== 1 || (data.format !== undefined && data.format !== 'plaude-code-history') ||
       Object.keys(data).some(key => !['version','format','exportedAt','runs'].includes(key)) ||
       typeof data.exportedAt !== 'string' || data.exportedAt.length > 80 || !Number.isFinite(Date.parse(data.exportedAt)) ||
-      !Array.isArray(data.runs) || data.runs.length > HISTORY_LIMIT) throw Error('运行历史备份格式无效或超过 100 条。');
+      !Array.isArray(data.runs) || data.runs.length > getLimits().historyCount) throw Error('运行历史备份格式无效或超过 100 条。');
   return data.runs.map(importRecord);
 }
 const contentKey = record => JSON.stringify(Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'localId')));
 const historySnapshot = records => JSON.stringify(records.map(validateExecutionRecord).sort((a,b) => a.localId.localeCompare(b.localId)));
 export function planHistoryImport(incoming, existing, { newId = () => crypto.randomUUID() } = {}) {
-  if (!Array.isArray(incoming) || incoming.length > HISTORY_LIMIT) throw Error('运行历史备份最多 100 条。');
+  if (!Array.isArray(incoming) || incoming.length > getLimits().historyCount) throw Error('运行历史备份最多 100 条。');
   const source = incoming.map(importRecord), current = existing.map(validateExecutionRecord), all = [...current];
   const ids = new Set(current.map(record => record.localId)), contents = new Set(current.map(contentKey));
   const additions = []; let skipped = 0, renamed = 0;

@@ -1,10 +1,11 @@
+import {getLimits} from '../public/site_limits.js';
 import { readEventStream } from '../public/event_stream.js';
 
 export async function collectProviderStream(body, protocol, onDelta) {
   let text = '', usage, finishReason, completed = false, finalResponse;
   const append = delta => {
     if (typeof delta !== 'string' || !delta) return;
-    if (text.length + delta.length > 240000) throw new Error('Upstream output too large');
+    if (text.length + delta.length > getLimits().replyChars) throw new Error('Upstream output too large');
     text += delta; onDelta(delta);
   };
   for await (const frame of readEventStream(body)) {

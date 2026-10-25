@@ -1,4 +1,5 @@
-export const MAX_OCR_PAGES = 20;
+import {getLimits} from './site_limits.js';
+export const MAX_OCR_PAGES = getLimits().ocrPages;
 export const MAX_OCR_PIXELS = 4_000_000;
 export function abortError() { return new DOMException('已取消文件解析，原资料保留。', 'AbortError'); }
 export function checkAbort(signal) { if (signal?.aborted) throw abortError(); }
@@ -20,14 +21,14 @@ export function ocrViewport(page) {
 }
 const clean = text => text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').trim();
 /** Adapters allow cancellation and resource limits to be tested without OCR/model calls. */
-export async function readPdf(pdf, {signal, progress = () => {}, choosePages = async () => [], recognizePage, maxChars = 120000} = {}) {
-  if (!Number.isInteger(pdf.numPages) || pdf.numPages < 1 || pdf.numPages > 200) throw Error('PDF 最多 200 页，请拆分后上传。');
+export async function readPdf(pdf, {signal, progress = () => {}, choosePages = async () => [], recognizePage, maxChars = getLimits().documentChars} = {}) {
+  if (!Number.isInteger(pdf.numPages) || pdf.numPages < 1 || pdf.numPages > getLimits().pdfPages) throw Error(`PDF 最多 ${getLimits().pdfPages} 页，请拆分后上传。`);
   const states = Array(pdf.numPages).fill('unread'), texts = new Map(); let chars = 0;
   function add(page, text, kind) {
     text = clean(text);
     if (!text) { if (kind === 'ocr') states[page - 1] = 'no_text'; return; }
     chars += text.length;
-    if (chars > maxChars) throw Error('PDF 超过 12 万字符，请拆分后导入；未导入截断内容。');
+    if (chars > maxChars) throw Error(`PDF 超过 ${maxChars/10000} 万字符，请拆分后导入；未导入截断内容。`);
     texts.set(page, text); states[page - 1] = kind;
   }
   for (let n = 1; n <= pdf.numPages; n++) {
@@ -40,9 +41,9 @@ export async function readPdf(pdf, {signal, progress = () => {}, choosePages = a
   }
   const missing = states.flatMap((s, i) => s === 'unread' ? [i + 1] : []);
   if (missing.length) {
-    const selected = await abortable(choosePages({totalPages: pdf.numPages, missing, maxPages: MAX_OCR_PAGES, signal}), signal);
+    const selected = await abortable(choosePages({totalPages: pdf.numPages, missing, maxPages: getLimits().ocrPages, signal}), signal);
     checkAbort(signal);
-    if (!Array.isArray(selected) || selected.length > MAX_OCR_PAGES || new Set(selected).size !== selected.length || selected.some(n => !missing.includes(n))) throw Error('请从未读页中选择最多 20 页进行 OCR。');
+    if (!Array.isArray(selected) || selected.length > getLimits().ocrPages || new Set(selected).size !== selected.length || selected.some(n => !missing.includes(n))) throw Error(`请从未读页中选择最多 ${getLimits().ocrPages} 页进行 OCR。`);
     for (const [i, n] of [...selected].sort((a, b) => a - b).entries()) {
       checkAbort(signal); progress(`OCR 第 ${n} 页（${i + 1}/${selected.length}）…`);
       const page = await abortable(pdf.getPage(n), signal);

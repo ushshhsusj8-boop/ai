@@ -1,10 +1,11 @@
+import {getLimits} from './site_limits.js';
 import {openDocumentReader} from './document_reader.js';
 import {getStorageScope} from './scoped_storage.js';
 import {validatePdfInfo, pdfCoverage} from './pdf_coverage.js';
-export const MAX_DOCUMENT_CHARS = 120000;
+export const MAX_DOCUMENT_CHARS = getLimits().documentChars;
 export function validateDocuments(value) {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 3) throw Error('每段对话最多保存 3 份资料，请新建对话添加更多。');
+  if (!Array.isArray(value) || value.length > getLimits().documentCount) throw Error('每段对话超过当前资料份数预算，请新建对话添加更多。');
   const ids = new Set();
   return value.map(doc => {
     if (!doc || typeof doc.id !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(doc.id) || ids.has(doc.id)
@@ -16,7 +17,7 @@ export function validateDocuments(value) {
       if (!section || typeof section.label !== 'string' || !section.label.trim() || section.label.length > 60
         || typeof section.text !== 'string' || !section.text.trim()) throw Error('资料段落无效。');
       length += section.text.length;
-      if (length > MAX_DOCUMENT_CHARS) throw Error('每份资料最多 12 万字符，请拆分文件后导入。');
+      if (length > getLimits().documentChars) throw Error(`每份资料最多 ${getLimits().documentChars/10000} 万字符，请拆分文件后导入。`);
       return { label: section.label, text: section.text };
     });
     const pdfInfo = validatePdfInfo(doc.pdfInfo, sections);
@@ -33,15 +34,15 @@ export function textSections(text, prefix = '段落') {
 }
 export function validateDocumentContext(value) {
   if (value === undefined) return undefined;
-  if (!value || !['retrieval', 'overview'].includes(value.mode) || !Array.isArray(value.sources) || value.sources.length > 6) throw Error('资料引用格式无效。');
+  if (!value || !['retrieval', 'overview'].includes(value.mode) || !Array.isArray(value.sources) || value.sources.length > getLimits().documentFragments) throw Error('资料引用格式无效。');
   const sources = value.sources.map(source => {
-    if (!source || !/^资料[1-3]·片段\d{1,4}$/.test(source.id) || typeof source.name !== 'string' || source.name.length > 100
-      || typeof source.location !== 'string' || source.location.length > 60 || typeof source.text !== 'string' || source.text.length > 1200) throw Error('资料引用内容无效。');
+    if (!source || !/^资料\d{1,2}·片段\d{1,5}$/.test(source.id) || typeof source.name !== 'string' || source.name.length > 100
+      || typeof source.location !== 'string' || source.location.length > 60 || typeof source.text !== 'string' || source.text.length > getLimits().documentFragmentChars) throw Error('资料引用内容无效。');
     const position = {};
     if (source.documentId !== undefined || source.sectionIndex !== undefined || source.offset !== undefined) {
       if (typeof source.documentId !== 'string' || !/^[a-zA-Z0-9_-]{8,80}$/.test(source.documentId)
         || !Number.isInteger(source.sectionIndex) || source.sectionIndex < 0 || source.sectionIndex >= 2000
-        || !Number.isInteger(source.offset) || source.offset < 0 || source.offset >= MAX_DOCUMENT_CHARS) throw Error('资料定位无效。');
+        || !Number.isInteger(source.offset) || source.offset < 0 || source.offset >= getLimits().documentChars) throw Error('资料定位无效。');
       Object.assign(position, { documentId: source.documentId, sectionIndex: source.sectionIndex, offset: source.offset });
     }
     return { id: source.id, name: source.name, location: source.location, text: source.text, ...position };

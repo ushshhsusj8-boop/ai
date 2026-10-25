@@ -1,17 +1,18 @@
+import {getLimits,withStoredLimits} from './site_limits.js';
 import { parseHistoryBackup, planHistoryImport, HISTORY_BYTES, HISTORY_LIMIT } from './execution_history.js';
 
 const backupText = runs => JSON.stringify({ format: 'plaude-code-history', version: 1, exportedAt: new Date().toISOString(), runs });
 export function validateCloudRuns(runs) {
   const records = parseHistoryBackup(backupText(runs));
   if (new Set(records.map(r => r.localId)).size !== records.length) throw Error('云备份记录编号重复。');
-  if (new TextEncoder().encode(JSON.stringify(records)).length > HISTORY_BYTES) throw Error('云备份最多100条 / 8 MiB，原记录保留。');
+  if (new TextEncoder().encode(JSON.stringify(records)).length > getLimits().historyBytes) throw Error('云备份超过当前条数或字节预算，原记录保留。');
   return records;
 }
 function envelope(value, userId) {
   if (value?.userId !== userId || !Number.isSafeInteger(value.revision) || value.revision < 0) {
     throw Error('云备份账户或版本不匹配，未更改本机记录。');
   }
-  return { userId, revision: value.revision, runs: validateCloudRuns(value.runs) };
+  return { userId, revision: value.revision, runs: withStoredLimits(()=>validateCloudRuns(value.runs)) };
 }
 export function createHistoryCloud({ userId, history, fetchImpl = globalThis.fetch,
   isCurrent = () => true, onIdentityChanged = () => {}, timeoutMs = 30000 }) {
@@ -50,7 +51,7 @@ export function createHistoryCloud({ userId, history, fetchImpl = globalThis.fet
     async previewUpload() {
       identity(); const incoming = validateCloudRuns(await history.list()), cloud = await request(); identity();
       let plan;
-      try { plan = planHistoryImport(incoming, cloud.runs); } catch { throw Error('合并后云备份超过100条 / 8 MiB，尚未上传；原记录保留。'); }
+      try { plan = planHistoryImport(incoming, cloud.runs); } catch { throw Error('合并后云备份超过当前条数或字节预算，尚未上传；原记录保留。'); }
       return { kind: 'upload', cloud, incoming, summary: summary(plan) };
     },
     async upload(preview) {
@@ -81,6 +82,6 @@ export function createHistoryCloud({ userId, history, fetchImpl = globalThis.fet
       if (result.runs.length || result.revision !== preview.revision + 1) throw Error('尚未确认云备份删除，请重新查询。');
       return result;
     },
-    limits: { count: HISTORY_LIMIT, bytes: HISTORY_BYTES },
+    limits: { count: getLimits().historyCount, bytes: getLimits().historyBytes },
   };
 }

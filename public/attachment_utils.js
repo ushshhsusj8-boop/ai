@@ -1,6 +1,7 @@
+import {getLimits} from './site_limits.js';
 const ALLOWED_EXTENSIONS = new Set(["txt", "md", "csv", "json"]);
-export const MAX_ATTACHMENT_BYTES = 64 * 1024;
-export const MAX_ATTACHMENT_CHARS = 6000;
+export const MAX_ATTACHMENT_BYTES = getLimits().textAttachmentBytes;
+export const MAX_ATTACHMENT_CHARS = getLimits().textAttachmentChars;
 
 function filenameForDisplay(value) {
   if (typeof value !== "string") throw new Error("文件名无效。");
@@ -19,7 +20,7 @@ export function validateTextAttachment(name, bytes) {
   const displayName = filenameForDisplay(name);
   if (!(bytes instanceof Uint8Array)) throw new Error("无法读取文件内容。");
   if (bytes.byteLength === 0) throw new Error("不能添加空文件。");
-  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) throw new Error("单个文本文件不能超过 64 KiB。");
+  if (bytes.byteLength > getLimits().textAttachmentBytes) throw new Error(`单个文本文件不能超过 ${getLimits().textAttachmentBytes/1024} KiB。`);
   let text;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, "");
@@ -30,8 +31,8 @@ export function validateTextAttachment(name, bytes) {
     throw new Error("文件包含二进制或不可显示的控制字符。");
   }
   if (!text.trim()) throw new Error("文件没有可读取的文字。");
-  if (Array.from(text).length > MAX_ATTACHMENT_CHARS) {
-    throw new Error("单个文本文件最多支持 6000 个字符。");
+  if (Array.from(text).length > getLimits().textAttachmentChars) {
+    throw new Error(`单个文本文件最多支持 ${getLimits().textAttachmentChars} 个字符。`);
   }
   return { name: displayName, text };
 }
@@ -39,8 +40,8 @@ export function validateTextAttachment(name, bytes) {
 export async function readTextFile(file) {
   if (!file || typeof file.arrayBuffer !== "function") throw new Error("无法读取所选文件。");
   filenameForDisplay(file.name);
-  if (typeof file.size === "number" && file.size > MAX_ATTACHMENT_BYTES) {
-    throw new Error("单个文本文件不能超过 64 KiB。");
+  if (typeof file.size === "number" && file.size > getLimits().textAttachmentBytes) {
+    throw new Error(`单个文本文件不能超过 ${getLimits().textAttachmentBytes/1024} KiB。`);
   }
   const buffer = await file.arrayBuffer();
   return validateTextAttachment(file.name, new Uint8Array(buffer));

@@ -1,3 +1,4 @@
+import {withStoredLimits,MAXIMUM_LIMITS} from '../public/site_limits.js';
 import {createHash, randomUUID} from 'node:crypto';
 import {closeSync, constants, existsSync, fstatSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {join, resolve} from 'node:path';
@@ -15,12 +16,13 @@ function atomicIndex(path, value) {
 /** One server process owns each account vault. Original binaries never enter project JSON. */
 export function createProjectOriginalStore(root, {requireUser, getProjects, now = Date.now, writeIndex = atomicIndex, removeBlob = path => rmSync(path, {force: true})}) {
   root = resolve(root);
-  function read(userId) {
+  function read(...args){return withStoredLimits(()=>readStored(...args));}
+  function readStored(userId) {
     requireUser(userId); if (!UUID.test(userId)) fail('账户编号无效。', 401);
     const directory = join(root, userId), index = join(directory, 'index.json');
     let value = {userId, files: [], usedBytes: 0};
     if (existsSync(index)) {
-      if (statSync(index).size > MAX_INDEX) throw Error('Invalid original file index');
+      if (statSync(index).size > Math.max(MAX_INDEX,MAXIMUM_LIMITS.originalFiles*1024)) throw Error('Invalid original file index');
       value = JSON.parse(readFileSync(index, 'utf8'));
     }
     return {directory, index, value: validateOriginalFiles(value, userId)};
@@ -32,7 +34,7 @@ export function createProjectOriginalStore(root, {requireUser, getProjects, now 
     try {
       handle = openSync(join(directory, item.id + '.bin'), constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
       const stats = fstatSync(handle);
-      if (!stats.isFile() || stats.size !== item.size || stats.size > ORIGINAL_LIMITS.maxFileBytes) throw Error('Original size mismatch');
+      if (!stats.isFile() || stats.size !== item.size || stats.size > MAXIMUM_LIMITS.originalFileBytes) throw Error('Original size mismatch');
       const content = readFileSync(handle);
       if (createHash('sha256').update(content).digest('hex') !== item.sha256) throw Error('Original checksum mismatch');
       return content;
@@ -69,20 +71,20 @@ export function createProjectOriginalStore(root, {requireUser, getProjects, now 
       const {value}=read(userId), digest=createHash('sha256').update(originalSnapshotText(value.files)).digest('hex');
       if(snapshot!==digest)fail('原文件列表已变化，请刷新并重新确认整批备份。',409);
       if(!value.files.some(f=>!f.cleanupPending))fail('当前账户没有可备份的原文件。');
-      const plan=originalZipPlan(value);
+      const plan=withStoredLimits(()=>originalZipPlan(value));
       return {size:plan.size,chunks:originalZipChunks(plan,item=>this.download(userId,item.id).content)};
     },
     upload(userId, {projectId, documentId, name}, content) {
       const current = read(userId), {value, directory, index} = current; name = originalName(name);
       const project = getProjects(userId).projects.find(p => p.id === projectId);
       if (!project?.documents.some(d => d.id === documentId)) fail('目标项目或资料已不存在，请重新打开项目。', 409);
-      if (!Buffer.isBuffer(content) || !content.length || content.length > ORIGINAL_LIMITS.maxFileBytes) fail('原文件必须大于0且不超过5 MiB。', 413);
+      if (!Buffer.isBuffer(content) || !content.length || content.length > ORIGINAL_LIMITS.maxFileBytes) fail('原文件必须大于0且不超过当前单文件容量。', 413);
       const sha256 = createHash('sha256').update(content).digest('hex'), existing = value.files.find(f => f.projectId === projectId && f.documentId === documentId);
       if (existing) {
         if (!existing.cleanupPending && existing.sha256 === sha256 && existing.size === content.length && existing.name === name) { bytes(directory, existing); return envelope(value); }
         fail('此资料已有原文件或待清理记录，未覆盖；请先下载保留并明确删除旧原文件。', 409);
       }
-      if (value.files.length >= ORIGINAL_LIMITS.maxFiles || value.usedBytes + content.length > ORIGINAL_LIMITS.maxTotalBytes) fail('原文件保管区已满（60个 / 64 MiB），请先下载备份并清理，已有资料保留。', 413);
+      if (value.files.length >= ORIGINAL_LIMITS.maxFiles || value.usedBytes + content.length > ORIGINAL_LIMITS.maxTotalBytes) fail('原文件保管区超过当前容量预算，请先下载备份并清理，已有资料保留。', 413);
       mkdirSync(directory, {recursive: true, mode: 0o700});
       const item = {id: randomUUID(), projectId, documentId, name, size: content.length, sha256, createdAt: now(), cleanupPending: false};
       const file = join(directory, item.id + '.bin'); let handle, committed = false;
@@ -102,10 +104,12 @@ export function createProjectOriginalStore(root, {requireUser, getProjects, now 
       if (!UUID.test(id)) fail('原文件不存在。', 404);
       let {value, directory, index} = read(userId); const item = value.files.find(f => f.id === id);
       if (!item) return envelope(value); // lost acknowledgements/repeated deletes are harmless
-      if (!item.cleanupPending) { item.cleanupPending = true; save(index, value); }
+      // A lower intake quota must not prevent removing an existing original.
+      // Retain the durable pending marker before touching the file itself.
+      if (!item.cleanupPending) { item.cleanupPending = true; withStoredLimits(()=>save(index, value)); }
       try {
         removeBlob(join(directory, item.id + '.bin'));
-        save(index, {...value, files: value.files.filter(f => f.id !== id), usedBytes: value.usedBytes - item.size});
+        withStoredLimits(()=>save(index, {...value, files: value.files.filter(f => f.id !== id), usedBytes: value.usedBytes - item.size}));
       } catch { /* Tombstone remains visible and charged until explicit retry. Other files are untouched. */ }
       return envelope(read(userId).value);
     }

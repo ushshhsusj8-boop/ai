@@ -1,12 +1,13 @@
+import {getLimits} from './site_limits.js';
 import { validateOriginalFiles, ORIGINAL_LIMITS } from './project_originals.js';
 import { verifyOriginalZip, MAX_ORIGINAL_ZIP_BYTES, originalSnapshotText } from './original_zip.js';
 
 export async function inspectOriginalBackup(blob, userId, options = {}) {
   options.check?.();
-  if (!blob || blob.size < 30 || blob.size > MAX_ORIGINAL_ZIP_BYTES) throw Error('请选择本站导出的原文件ZIP，最多65 MiB。');
+  if (!blob || blob.size < 30 || blob.size > getLimits().originalZipBytes) throw Error('请选择本站导出的原文件ZIP，最多65 MiB。');
   const header = new DataView(await blob.slice(0, 30).arrayBuffer());
   const nameLength = header.getUint16(26, true), size = header.getUint32(22, true);
-  if (header.getUint32(0, true) !== 0x04034b50 || nameLength !== 13 || size > 128 * 1024 || 30 + nameLength + size > blob.size) throw Error('本站原文件备份清单无效。');
+  if (header.getUint32(0, true) !== 0x04034b50 || nameLength !== 13 || size > Math.max(128*1024,getLimits().originalFiles*1024) || 30 + nameLength + size > blob.size) throw Error('本站原文件备份清单无效。');
   const decode = new TextDecoder('utf-8', { fatal: true });
   if (decode.decode(await blob.slice(30, 43).arrayBuffer()) !== 'manifest.json') throw Error('ZIP缺少本站原文件清单。');
   let manifest;
@@ -32,6 +33,6 @@ export function planOriginalRestore(current, archive) {
     additions.push(file);
   }
   const total = current.files.length + additions.length, usedBytes = current.usedBytes + additions.reduce((n, f) => n + f.size, 0);
-  if (total > ORIGINAL_LIMITS.maxFiles || usedBytes > ORIGINAL_LIMITS.maxTotalBytes) throw Error('恢复后超过60个 / 64 MiB，整批不恢复；已有原文件保留。');
+  if (total > ORIGINAL_LIMITS.maxFiles || usedBytes > ORIGINAL_LIMITS.maxTotalBytes) throw Error(`恢复后超过${getLimits().originalFiles}个 / ${getLimits().originalTotalBytes/1048576} MiB，整批不恢复；已有原文件保留。`);
   return { additions, skipped, total, usedBytes, baseline: originalSnapshotText(current.files) };
 }

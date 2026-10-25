@@ -1,10 +1,11 @@
+import {getLimits} from './site_limits.js';
 import { readTextFile } from './attachment_utils.js';
 import { MAX_DOCUMENT_CHARS, textSections } from './document_library.js';
 import {abortable, checkAbort, ocrViewport, readPdf} from './pdf_parse.js';
 import {choosePdfOcrPages} from './pdf_ocr_picker.js';
 import {createPdfOcr} from './pdf_ocr.js';
 const TEXT_TYPES = ['txt', 'md', 'json', 'csv'];
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = getLimits().documentBytes;
 const scripts = new Map();
 function script(path) {
   if (!scripts.has(path)) scripts.set(path, new Promise((resolve, reject) => {
@@ -39,7 +40,7 @@ export async function parseDocument(file, { language = 'chi_sim+eng', progress =
   const extension = file.name.split('.').at(-1).toLowerCase();
   if (TEXT_TYPES.includes(extension) && !full) return { ...await readTextFile(file), truncated: false };
   if (![...TEXT_TYPES, 'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp'].includes(extension)) throw Error('支持 TXT、Markdown、CSV、JSON、PDF、DOCX 和图片。');
-  if (!file.size || file.size > MAX_BYTES) throw Error('文档或图片必须小于 5 MiB，且不能为空。');
+  if (!file.size || file.size > getLimits().documentBytes) throw Error('文档或图片必须小于 5 MiB，且不能为空。');
   let text = '', pdfInfo; const sections = [];
   if (TEXT_TYPES.includes(extension)) {
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()); }
@@ -55,7 +56,7 @@ export async function parseDocument(file, { language = 'chi_sim+eng', progress =
     signal?.addEventListener('abort', stop, {once: true});
     try {
       const document = await abortable(task.promise, signal);
-      if (document.numPages > (full ? 200 : 40)) throw Error(`一次最多解析 ${full ? 200 : 40} 页 PDF，请先拆分文档。`);
+      if (document.numPages > (full ? getLimits().pdfPages : Math.min(40,getLimits().pdfPages))) throw Error(`一次最多解析 ${full ? getLimits().pdfPages : Math.min(40,getLimits().pdfPages)} 页 PDF，请先拆分文档。`);
       const result = await readPdf(document, {signal, progress, choosePages, recognizePage: async (page, n) => {
         if (!ocr) ocr = await createPdfOcr(language, signal, message => progress(`第 ${n} 页 · ${message}`));
         const viewport = ocrViewport(page), canvas = window.document.createElement('canvas');
@@ -75,7 +76,7 @@ export async function parseDocument(file, { language = 'chi_sim+eng', progress =
   } else {
     progress('准备图片识别…');
     const bitmap = await createImageBitmap(file);
-    const validSize = bitmap.width * bitmap.height <= 12_000_000; bitmap.close();
+    const validSize = bitmap.width * bitmap.height <= getLimits().imagePixels; bitmap.close();
     if (!validSize) throw Error('图片最多 1200 万像素，请缩小后重试。');
     const worker = await createPdfOcr(language, signal, progress);
     try { text = await worker.recognize(file); } finally { worker.terminate(); }
@@ -84,11 +85,11 @@ export async function parseDocument(file, { language = 'chi_sim+eng', progress =
   text = text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').trim();
   if (!text) throw Error('没有识别到可用文字。');
   if (full) {
-    if (text.length > MAX_DOCUMENT_CHARS) throw Error('文档超过 12 万字符，请拆分后导入；未导入截断内容。');
+    if (text.length > getLimits().documentChars) throw Error(`文档超过 ${getLimits().documentChars/10000} 万字符，请拆分后导入；未导入截断内容。`);
     return { name: safeName(file.name), text, sections: sections.length ? sections : textSections(text), ...(pdfInfo ? {pdfInfo} : {}), truncated: false, full: true };
   }
-  const chars = Array.from(text), truncated = chars.length > 6000;
-  return { name: safeName(file.name), text: chars.slice(0, 6000).join(''), truncated, ...(pdfInfo ? {pdfInfo} : {}) };
+  const chars = Array.from(text), truncated = chars.length > getLimits().textAttachmentChars;
+  return { name: safeName(file.name), text: chars.slice(0, getLimits().textAttachmentChars).join(''), truncated, ...(pdfInfo ? {pdfInfo} : {}) };
 }
 export function formatDocument(name, text) {
   return `【文件内容：${safeName(name)}】\n${text.trim()}\n【文件结束】`;

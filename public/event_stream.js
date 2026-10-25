@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 // Shared by the browser and upstream adapters; handles split UTF-8 and SSE frames.
 export async function* readEventStream(body) {
   if (!body) throw new Error('响应没有可读取的数据流。');
@@ -7,7 +8,7 @@ export async function* readEventStream(body) {
     while (true) {
       const { value, done } = await reader.read();
       received += value?.byteLength || 0;
-      if (received > 8 * 1024 * 1024) throw new Error('数据流超过本次请求的大小限制。');
+      if (received > getLimits().streamBytes) throw new Error('数据流超过本次请求的大小限制。');
       let text = decoder.decode(value, { stream: !done });
       if (text.length) {
         // CR ends a line immediately; suppress its optional LF across byte chunks.
@@ -19,7 +20,7 @@ export async function* readEventStream(body) {
       while ((separator = /\r\n\r\n|\n\n|\r\r/.exec(buffer))) {
         const frame = buffer.slice(0, separator.index);
         buffer = buffer.slice(separator.index + separator[0].length);
-        if (frame.length > 1024 * 1024) throw new Error('数据流事件过大。');
+        if (frame.length > getLimits().eventBytes) throw new Error('数据流事件过大。');
         let event = 'message'; const data = [];
         for (const line of frame.split(/\r\n|\n|\r/)) {
           if (line.startsWith('event:')) event = line.slice(6).trim();
@@ -27,7 +28,7 @@ export async function* readEventStream(body) {
         }
         if (data.length) yield { event, data: data.join('\n') };
       }
-      if (buffer.length > 1024 * 1024) throw new Error('数据流事件过大。');
+      if (buffer.length > getLimits().eventBytes) throw new Error('数据流事件过大。');
       if (done) break;
     }
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }

@@ -35,3 +35,8 @@ The web application and Linux code runner are separate processes. The feature is
 ## Windows commands
 
 Use `pwsh.exe -NoLogo -NoProfile` for automation. `start-local.ps1` is an optional foreground launcher; it does not install a service or create a startup task. The documented `npm run dev` command is sufficient.
+
+
+## Owner and policy setup
+
+See [DEVELOPER_ADMIN.md](DEVELOPER_ADMIN.md) for explicit account binding and shared usage budgets. Never publish the generated code or account permission sidecar. Code upgrades must preserve current user state and share revocations.

@@ -1,6 +1,7 @@
+import {getLimits} from './site_limits.js';
 export function normalizeContextSettings(value) {
   return {
-    historyTurns: Number.isInteger(value?.historyTurns) && value.historyTurns >= 0 && value.historyTurns <= 10
+    historyTurns: Number.isInteger(value?.historyTurns) && value.historyTurns >= 0 && value.historyTurns <= getLimits().historyTurns
       ? value.historyTurns : null,
     resetAt: Number.isSafeInteger(value?.resetAt) && value.resetAt >= 0 && value.resetAt <= Date.now()
       ? value.resetAt : null,
@@ -11,7 +12,7 @@ export function normalizeContextSettings(value) {
 
 // Keep the current question and complete historical question/answer pairs.
 // A context reset changes what is sent, without deleting the visible history.
-export function buildChatContext(messages, settings, { maxMessages = 24, maxChars = 22000 } = {}) {
+export function buildChatContext(messages, settings, { maxMessages = getLimits().maxMessages, maxChars = getLimits().historyChars } = {}) {
   const context = normalizeContextSettings(settings);
   let latestIndex = messages.length - 1;
   while (latestIndex >= 0 && messages[latestIndex]?.role !== "user") latestIndex -= 1;
@@ -34,7 +35,7 @@ export function buildChatContext(messages, settings, { maxMessages = 24, maxChar
       || typeof question.content !== "string" || typeof answer.content !== "string") { reasons.add('未成对消息'); continue; }
     if (!afterReset(question) || !afterReset(answer)) { reasons.add('上下文边界'); break; }
     const length = question.content.length + answer.content.length;
-    if (imageCount + (question.images?.length || 0) > 8) { reasons.add('图片上限'); break; }
+    if (imageCount + (question.images?.length || 0) > getLimits().contextImages) { reasons.add('图片上限'); break; }
     if (selected.length + 2 > maxMessages) { reasons.add('消息条数上限'); break; }
     if (length > remaining) { reasons.add('字符预算'); break; }
     selected.unshift({ role: "user", content: question.content, ...(question.images?.length ? { images: question.images } : {}) }, { role: "assistant", content: answer.content });

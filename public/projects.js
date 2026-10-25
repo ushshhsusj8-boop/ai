@@ -1,11 +1,12 @@
+import {getLimits,withStoredLimits} from './site_limits.js';
 import { validateDocuments } from './document_library.js';
-export const PROJECT_BYTES = 16 * 1024 * 1024;
+export const PROJECT_BYTES = getLimits().projectBytes;
 const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{8,128}$/.test(value);
 export function validateProjects(value) {
-  if (!value || value.version !== 1 || !Array.isArray(value.projects) || value.projects.length > 20 || !Array.isArray(value.links) || value.links.length > 10000) throw Error('项目备份格式无效，最多 20 个项目、10000 个关联。');
+  if (!value || value.version !== 1 || !Array.isArray(value.projects) || value.projects.length > getLimits().projects || !Array.isArray(value.links) || value.links.length > 10000) throw Error('项目备份格式无效，最多 20 个项目、10000 个关联。');
   const ids = new Set(), chats = new Set();
   const projects = value.projects.map(p => {
-    if (!p || !validId(p.id) || ids.has(p.id) || typeof p.name !== 'string' || !p.name.trim() || p.name.length > 60 || typeof p.instructions !== 'string' || p.instructions.length > 2000 || !Number.isSafeInteger(p.revision) || p.revision < 0) throw Error('项目名称、指令或版本无效。');
+    if (!p || !validId(p.id) || ids.has(p.id) || typeof p.name !== 'string' || !p.name.trim() || p.name.length > 60 || typeof p.instructions !== 'string' || p.instructions.length > getLimits().instructionChars || !Number.isSafeInteger(p.revision) || p.revision < 0) throw Error('项目名称、指令或版本无效。');
     ids.add(p.id);
     return { id: p.id, name: p.name.trim(), instructions: p.instructions, revision: p.revision, documents: validateDocuments(p.documents) };
   });
@@ -14,7 +15,7 @@ export function validateProjects(value) {
     chats.add(link.conversationId); return { conversationId: link.conversationId, projectId: link.projectId };
   });
   const result = { version: 1, projects, links };
-  if (new TextEncoder().encode(JSON.stringify(result)).length > PROJECT_BYTES) throw Error('项目库已满（16 MiB），请先导出并清理资料。旧内容仍保留。');
+  if (new TextEncoder().encode(JSON.stringify(result)).length > getLimits().projectBytes) throw Error('项目库已满（16 MiB），请先导出并清理资料。旧内容仍保留。');
   return result;
 }
 export function projectContext(state, conversation) {
@@ -22,9 +23,9 @@ export function projectContext(state, conversation) {
   const link = state.links.find(l => l.conversationId === conversation.id);
   const project = state.projects.find(p => p.id === link?.projectId);
   const documents = [...(project?.documents || []), ...(conversation.documents || [])].filter(d => d.enabled !== false);
-  if (documents.length > 3) throw Error('项目与对话合计最多引用 3 份资料，请先暂停部分文件。');
+  if (documents.length > getLimits().documentCount) throw Error(`项目与对话合计最多引用 ${getLimits().documentCount} 份资料，请先暂停部分文件。`);
   const instructions = [project?.instructions, conversation.instructions].filter(Boolean).join('\n\n');
-  if (instructions.length > 2000) throw Error('项目指令与对话回答方式合计超过 2000 字符，请缩短后再发送。');
+  if (instructions.length > getLimits().instructionChars) throw Error('项目指令与对话回答方式合计超过 2000 字符，请缩短后再发送。');
   return { instructions, documents: validateDocuments(documents), project };
 }
 export function createProjectStore(database = globalThis.indexedDB) {
@@ -48,7 +49,7 @@ export function createProjectStore(database = globalThis.indexedDB) {
       tx.oncomplete = () => resolve(result);
       tx.onabort = tx.onerror = () => reject(failure || Error('项目保存失败，旧内容仍保留。请检查存储空间或权限。'));
       const req = store.get('all');
-      req.onsuccess = () => { try { result = validateProjects(req.result || empty()); if (change) { change(result); result = validateProjects(result); store.put(result, 'all'); } } catch (e) { failure = e; tx.abort(); } };
+      req.onsuccess = () => { try { result = withStoredLimits(()=>validateProjects(req.result || empty())); if (change) { change(result); result = validateProjects(result); store.put(result, 'all'); } } catch (e) { failure = e; tx.abort(); } };
     });
   }
   return {

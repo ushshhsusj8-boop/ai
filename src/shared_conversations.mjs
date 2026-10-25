@@ -1,3 +1,4 @@
+import {getLimits,withStoredLimits,MAXIMUM_LIMITS} from '../public/site_limits.js';
 import { validateDocuments, validateDocumentContext } from '../public/document_library.js';
 import { validateSearch } from '../public/backups.js';
 import { createHash } from "node:crypto";
@@ -7,9 +8,6 @@ import { validateImages } from '../public/image_attachments.js';
 import {validateBranch} from '../public/conversation_branches.js';
 
 const MAX_CONVERSATIONS = 10_000;
-const MAX_MESSAGES = 10_000;
-const MAX_CONTENT_CHARS = 256_000;
-const MAX_TOTAL_CHARS = 4 * 1024 * 1024;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/;
 const MODEL_PATTERN = /^[~A-Za-z0-9][A-Za-z0-9._~:/+-]{0,191}$/;
@@ -47,9 +45,10 @@ export function normalizeConversation(value, now = Date.now(), { allowEmpty = fa
   if (typeof value.model !== "string" || !MODEL_PATTERN.test(value.model) || value.model.includes("://")) {
     throw publicError("model is invalid");
   }
-  if (!Array.isArray(value.messages) || value.messages.length < (allowEmpty ? 0 : 1) || value.messages.length > MAX_MESSAGES) {
-    throw publicError(`messages must contain between 1 and ${MAX_MESSAGES} items`);
+  if (!Array.isArray(value.messages) || value.messages.length < (allowEmpty ? 0 : 1) || value.messages.length > getLimits().conversationMessages) {
+    throw publicError(`messages must contain between 1 and ${getLimits().conversationMessages} items`);
   }
+  if(typeof value.instructions==='string'&&value.instructions.length>getLimits().instructionChars)throw publicError('对话指令超过当前预算，原内容保留，请先另存备份再修改。',413);
   const documents = validateDocuments(value.documents);
   let totalCharacters = documents.reduce((sum, doc) => sum + doc.sections.reduce((n, section) => n + section.text.length, 0), 0);
   const messages = value.messages.map((message) => {
@@ -58,7 +57,7 @@ export function normalizeConversation(value, now = Date.now(), { allowEmpty = fa
       throw publicError("shared messages are invalid");
     }
     if (typeof message.content !== "string" || !message.content.trim()
-      || message.content.length > MAX_CONTENT_CHARS) throw publicError("message content is empty or too large", 413);
+      || message.content.length > Math.max(256000,getLimits().replyChars)) throw publicError("message content is empty or too large", 413);
     const content = message.content;
     const images = validateImages(message.images, message.role);
     const documentContext = validateDocumentContext(message.documentContext);
@@ -79,7 +78,7 @@ export function normalizeConversation(value, now = Date.now(), { allowEmpty = fa
       ...(Number.isSafeInteger(message.groundedAt) ? { groundedAt: message.groundedAt } : {}),
     });
   });
-  if (totalCharacters > MAX_TOTAL_CHARS) throw publicError("shared conversation is too large", 413);
+  if (totalCharacters > getLimits().conversationChars) throw publicError("shared conversation is too large", 413);
   const createdAt = validTime(value.createdAt, now);
   return Object.freeze({
     id: value.id,
@@ -92,13 +91,13 @@ export function normalizeConversation(value, now = Date.now(), { allowEmpty = fa
     pinned: value.pinned === true,
     archived: value.archived === true,
     webSearch: value.webSearch === true,
-    instructions: typeof value.instructions === "string" ? value.instructions.slice(0, 2000) : "",
+    instructions: typeof value.instructions === "string" ? value.instructions.slice(0, getLimits().instructionChars) : "",
     parameters: Object.fromEntries(["temperature", "top_p", "max_output_tokens"]
       .filter((key) => Number.isFinite(value.parameters?.[key]))
       .map((key) => [key, value.parameters[key]])),
     context: {
       historyTurns: Number.isInteger(value.context?.historyTurns) && value.context.historyTurns >= 0
-        && value.context.historyTurns <= 10 ? value.context.historyTurns : null,
+        && value.context.historyTurns <= getLimits().historyTurns ? value.context.historyTurns : null,
       resetAt: Number.isSafeInteger(value.context?.resetAt) ? value.context.resetAt : null,
       ...(value.context?.useMemory===false?{useMemory:false}:{}),
       ...(value.context?.usePersonalInstructions===false?{usePersonalInstructions:false}:{}),
@@ -136,14 +135,14 @@ export function createSharedConversationStore(fileName) {
   let records = [];
   if (existsSync(storagePath)) {
     const raw = readFileSync(storagePath);
-    if (raw.length > MAX_FILE_BYTES) throw new Error("Shared conversation file is too large");
+    if (raw.length > MAXIMUM_LIMITS.cloudWorkspaceBytes) throw new Error("Shared conversation file is too large");
     const parsed = JSON.parse(raw.toString("utf8"));
     if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.conversations)
       || parsed.conversations.length > MAX_CONVERSATIONS) {
       throw new Error("Shared conversation file is invalid");
     }
     records = parsed.conversations.map((item) => ({
-      ...normalizeConversation(item),
+      ...withStoredLimits(()=>normalizeConversation(item)),
       editHash: typeof item.editHash === "string" && /^[a-f0-9]{64}$/.test(item.editHash)
         ? item.editHash : (() => { throw new Error("Shared conversation edit hash is invalid"); })(),
     }));

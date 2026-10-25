@@ -1,3 +1,4 @@
+import {getLimits,withStoredLimits} from '../public/site_limits.js';
 import {createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
 import {existsSync,readFileSync,mkdirSync,writeFileSync,openSync,fsyncSync,closeSync,renameSync,rmSync,statSync,readdirSync} from 'node:fs';
 import {dirname,join} from 'node:path';
@@ -14,21 +15,22 @@ export function createAccountConnections({file,userFor}) {
     const data=readFileSync(keyFile);if(data.length!==32)fail('连接加密密钥无效，已保留原资料。',500);return data;
   }
   function path(id){userFor(id);return join(directory,id+'.json');}
-  function read(id){
+  function read(...args){return withStoredLimits(()=>readStored(...args));}
+  function readStored(id){
     const target=path(id);if(!existsSync(target))return {revision:0,connections:[]};
     try{
-      if(!existsSync(keyFile)||statSync(target).size>256*1024)throw Error();
+      if(!existsSync(keyFile)||statSync(target).size>32*1024*1024)throw Error();
       const env=JSON.parse(readFileSync(target,'utf8'));if(env.version!==1)throw Error();
       const decipher=createDecipheriv('aes-256-gcm',key(),Buffer.from(env.iv,'base64'));decipher.setAAD(Buffer.from('plaude-connections-v1:'+id));decipher.setAuthTag(Buffer.from(env.tag,'base64'));
       const value=JSON.parse(Buffer.concat([decipher.update(Buffer.from(env.data,'base64')),decipher.final()]));
-      if(!Number.isSafeInteger(value.revision)||value.revision<1||!Array.isArray(value.connections)||value.connections.length>12)throw Error();
+      if(!Number.isSafeInteger(value.revision)||value.revision<1||!Array.isArray(value.connections)||value.connections.length>getLimits().connections)throw Error();
       const ids=new Set();for(const c of value.connections){validateConnection(c);if(ids.has(c.id)||!c.apiKey)throw Error();ids.add(c.id);}return value;
     }catch{fail('无法读取个人连接，已保留原资料；请联系站点维护者。',500);}
   }
   function view(id,value=read(id)){return {userId:id,revision:value.revision,connections:value.connections.map(({apiKey,...c})=>({...c,keyConfigured:!!apiKey})),encrypted:true};}
   function save(id,input){
     const previous=read(id);
-    if(!input||Object.keys(input).some(k=>!['revision','connections'].includes(k))||!Array.isArray(input.connections)||input.connections.length>12)fail('每个账户最多12个个人连接。');
+    if(!input||Object.keys(input).some(k=>!['revision','connections'].includes(k))||!Array.isArray(input.connections)||input.connections.length>getLimits().connections)fail('每个账户个人连接超过当前数量预算。');
     if(input.revision!==previous.revision)fail('连接已在其他设备修改，请先读取云端版本。',409);
     const ids=new Set(),connections=input.connections.map(raw=>{
       const c=validateConnection(raw);if(ids.has(c.id))fail('连接编号重复。');ids.add(c.id);

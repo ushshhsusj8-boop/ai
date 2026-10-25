@@ -1,3 +1,4 @@
+import {getLimits,withStoredLimits} from './site_limits.js';
 import { scopedStorage } from './scoped_storage.js';
 import { validateDocuments, validateDocumentContext } from './document_library.js';
 import { validatePromptLibrary } from "./prompt_library.js";
@@ -18,13 +19,13 @@ function cloudPrompts(storage){
 function backupPrompts(storage){return cloudPrompts(storage)?.prompts||readSaved(storage,PROMPTS_KEY,validatePromptLibrary);}
 const PROMPTS_KEY = "yunjian-ai-prompt-library-v1";
 const FAVORITES_KEY = "yunjian-ai-model-favorites-v1";
-const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
+const MAX_BACKUP_BYTES = getLimits().cloudWorkspaceBytes;
 const MAX_CONVERSATIONS = 10_000;
-const MAX_PRESETS = 20;
-const MAX_MESSAGES = 10_000;
-const MAX_MESSAGE_CHARS = 256000;
-const MAX_INSTRUCTIONS_CHARS = 2000;
-const MAX_SEARCH_SOURCES = 12;
+const MAX_PRESETS = getLimits().customPresets;
+const MAX_MESSAGES = getLimits().conversationMessages;
+const MAX_MESSAGE_CHARS = Math.max(256000,getLimits().replyChars);
+const MAX_INSTRUCTIONS_CHARS = getLimits().instructionChars;
+const MAX_SEARCH_SOURCES = getLimits().searchSources;
 const MAX_GROUNDED_HISTORY_AGE_MS = 2 * 365 * 24 * 60 * 60 * 1000;
 
 function fail(message) {
@@ -85,7 +86,7 @@ function validateContext(value) {
   if(value.usePersonalInstructions!==undefined&&typeof value.usePersonalInstructions!=='boolean')fail('通用指令使用开关无效。');
   if(value.useMemory!==undefined&&typeof value.useMemory!=='boolean')fail('记忆使用开关无效。');
   if (value.historyTurns !== undefined && value.historyTurns !== null
-    && (!Number.isInteger(value.historyTurns) || value.historyTurns < 0 || value.historyTurns > 10)) {
+    && (!Number.isInteger(value.historyTurns) || value.historyTurns < 0 || value.historyTurns > getLimits().historyTurns)) {
     fail("携带的历史轮数无效。");
   }
   if (value.resetAt !== undefined && value.resetAt !== null
@@ -101,7 +102,7 @@ export function validateSearch(value, label = '联网来源') {
   if (typeof value.enabled !== "boolean" || typeof value.used !== "boolean") {
     fail(`${label}的联网状态无效。`);
   }
-  if (!Array.isArray(value.queries) || value.queries.length > 8) fail(`${label}的搜索词无效。`);
+  if (!Array.isArray(value.queries) || value.queries.length > getLimits().searchQueries) fail(`${label}的搜索词无效。`);
   const querySet = new Set();
   const queries = value.queries.map((query) => {
     const normalized = boundedText(query, 300, `${label}的搜索词`).replace(/\s+/g, " ").trim();
@@ -109,7 +110,7 @@ export function validateSearch(value, label = '联网来源') {
     querySet.add(normalized);
     return normalized;
   });
-  if (!Array.isArray(value.sources) || value.sources.length > MAX_SEARCH_SOURCES) {
+  if (!Array.isArray(value.sources) || value.sources.length > getLimits().searchSources) {
     fail(`${label}的来源数量无效。`);
   }
   const sourceSet = new Set();
@@ -162,10 +163,10 @@ function validateConversations(value) {
     const parameters = validateParameters(item.parameters);
     const webSearch = item.webSearch === undefined ? false : item.webSearch;
     if (typeof webSearch !== "boolean") fail(`${label}的联网搜索状态无效。`);
-    const instructions = item.instructions === undefined ? "" : boundedText(item.instructions, MAX_INSTRUCTIONS_CHARS, `${label}的回答方式`, true);
+    const instructions = item.instructions === undefined ? "" : boundedText(item.instructions, getLimits().instructionChars, `${label}的回答方式`, true);
     const updatedAt = item.updatedAt === undefined ? Date.now() : item.updatedAt;
     if (!Number.isFinite(updatedAt) || updatedAt < 0) fail(`${label}的更新时间无效。`);
-    if (!Array.isArray(item.messages) || (item.messages.length < 1 && !item.documents?.length&&!branch&&item.projectLinked!==true) || item.messages.length > MAX_MESSAGES) {
+    if (!Array.isArray(item.messages) || (item.messages.length < 1 && !item.documents?.length&&!branch&&item.projectLinked!==true) || item.messages.length > getLimits().conversationMessages) {
       fail(`${label}的消息数量超过单次导入上限，记录不会自动删除。`);
     }
     const messages = item.messages.map((message, messageIndex) => {
@@ -195,7 +196,7 @@ function validateConversations(value) {
       return {
         role: message.role,
         ...(documentContext ? { documentContext } : {}),
-        content: boundedText(message.content, MAX_MESSAGE_CHARS, `${label}的消息`),
+        content: boundedText(message.content, Math.max(256000,getLimits().replyChars), `${label}的消息`),
         ...(images.length ? { images } : {}),
         ...(createdAt === undefined ? {} : { createdAt }),
         ...(groundedAt === undefined ? {} : { groundedAt }),
@@ -208,7 +209,7 @@ function validateConversations(value) {
 }
 
 function validatePresets(value) {
-  if (!Array.isArray(value) || value.length > MAX_PRESETS) fail("自定义预设数量超出限制。最多保存 20 个。");
+  if (!Array.isArray(value) || value.length > getLimits().customPresets) fail("自定义预设数量超出限制。最多保存 20 个。");
   const seen = new Set();
   return value.map((item, index) => {
     const label = `第 ${index + 1} 个预设`;
@@ -221,7 +222,7 @@ function validatePresets(value) {
     return {
       id: item.id,
       name: boundedText(item.name, 40, `${label}的名称`).trim(),
-      instructions: boundedText(item.instructions, MAX_INSTRUCTIONS_CHARS, `${label}的回答方式`).trim(),
+      instructions: boundedText(item.instructions, getLimits().instructionChars, `${label}的回答方式`).trim(),
     };
   });
 }
@@ -236,7 +237,8 @@ function readSaved(storage, key, validate) {
   }
 }
 
-export function createBackup(storage, now = new Date()) {
+export function createBackup(...args){return withStoredLimits(()=>createStoredBackup(...args));}
+function createStoredBackup(storage, now = new Date()) {
   const backup = {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
@@ -247,13 +249,13 @@ export function createBackup(storage, now = new Date()) {
     favorites: readSaved(storage, FAVORITES_KEY, validateModelFavorites),
   };
   const json = JSON.stringify(backup, null, 2);
-  if (new TextEncoder().encode(json).length > MAX_BACKUP_BYTES) fail("备份超过 64 MiB，无法导出。");
+  if (new TextEncoder().encode(json).length > getLimits().cloudWorkspaceBytes) fail(`备份超过 ${getLimits().cloudWorkspaceBytes/1048576} MiB，无法导出。`);
   return json;
 }
 
 export function planImport(text, storage) {
-  if (typeof text !== "string" || new TextEncoder().encode(text).length > MAX_BACKUP_BYTES) {
-    fail("备份文件超过 64 MiB 或无法读取。");
+  if (typeof text !== "string" || new TextEncoder().encode(text).length > getLimits().cloudWorkspaceBytes) {
+    fail(`备份文件超过 ${getLimits().cloudWorkspaceBytes/1048576} MiB 或无法读取。`);
   }
   let parsed;
   try {
@@ -287,7 +289,7 @@ export function planImport(text, storage) {
   if (existingConversations.length + newConversations.length > MAX_CONVERSATIONS) {
     fail("导入后对话超过单次导入上限，请拆分备份导入；已有记录保留。");
   }
-  if (existingPresets.length + newPresets.length > MAX_PRESETS) {
+  if (existingPresets.length + newPresets.length > getLimits().customPresets) {
     fail("导入后预设会超过 20 个，请先删除部分旧预设，再重试。");
   }
   if (existingPrompts.length + newPrompts.length > 30) {
@@ -370,7 +372,7 @@ function initBackupDialog() {
     const file = fileInput.files?.[0];
     if (!file) { status.textContent = "请先选择 .json 备份文件。"; return; }
     if (!file.name.toLowerCase().endsWith(".json")) { status.textContent = "请选择 .json 备份文件。"; return; }
-    if (file.size > MAX_BACKUP_BYTES) { status.textContent = "备份文件超过 64 MiB。"; return; }
+    if (file.size > getLimits().cloudWorkspaceBytes) { status.textContent = `备份文件超过 ${getLimits().cloudWorkspaceBytes/1048576} MiB。`; return; }
     importButton.disabled = true;
     try {
       const text = await file.text();

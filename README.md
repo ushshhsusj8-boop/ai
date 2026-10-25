@@ -2,10 +2,11 @@
 
 A self-hosted, multi-provider AI chat workspace built with Node.js and browser-native JavaScript.
 
-[中文说明](README.zh-CN.md) · [Setup](docs/SETUP.md) · [Features and limits](docs/FEATURES.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+[中文说明](README.zh-CN.md) · [Setup](docs/SETUP.md) · [Features and limits](docs/FEATURES.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Owner and budgets](docs/DEVELOPER_ADMIN.md)
 
 ## What it does
 
+- Let the site owner explicitly bind an account, assign administrators and configure shared budgets.
 - Let every account manage personal model URLs and encrypted API keys, with no fixed provider list.
 - Preview selected text and create expiring read-only links; revoke access from your account.
 - Stream responses, keep separate conversation instructions, retry interrupted questions and navigate conversation branches.
@@ -44,7 +45,7 @@ npm run check
 npm test
 ```
 
-The current source contains 361 tests. On Windows, 357 pass and four Linux-specific tests are skipped. Tests use temporary data and mocked model transports. CI is configured for Windows and Linux; a configured workflow is not evidence that a hosted CI run has already passed.
+The current source contains 385 tests. On Windows, 381 pass and four Linux-specific tests are skipped. Tests use temporary data and mocked model transports. CI is configured for Windows and Linux; a configured workflow is not evidence that a hosted CI run has already passed.
 
 ## Data and scope
 

@@ -1,3 +1,5 @@
+import {initSiteAdministration} from './site_administration.js';
+import {getLimits,withStoredLimits,MAXIMUM_LIMITS} from './site_limits.js';
 import { initProjectWorkspace } from './project_workspace.js';
 import { initExecutionConsole } from './execution_console.js';
 import { initVoiceComposer } from './voice_composer.js';
@@ -56,8 +58,8 @@ const DRAFTS_KEY = "yunjian-ai-drafts-v1";
 const SHARED_EDIT_KEYS_KEY = "yunjian-ai-shared-edit-keys-v1";
 const SHARED_AUTHOR_KEY = "yunjian-ai-shared-author-v1";
 const MODEL_FAVORITES_KEY = "yunjian-ai-model-favorites-v1";
-const MAX_INSTRUCTIONS_CHARS = 2000;
-const MAX_CUSTOM_PRESETS = 20;
+const MAX_INSTRUCTIONS_CHARS = getLimits().instructionChars;
+const MAX_CUSTOM_PRESETS = getLimits().customPresets;
 const BUILTIN_PRESETS = [
   { id: "default", name: "默认回答", instructions: "" },
   { id: "concise", name: "简洁清楚", instructions: "请用简洁、准确的中文回答。先给结论，再列出必要步骤；不确定时明确说明。" },
@@ -67,10 +69,10 @@ const BUILTIN_PRESETS = [
 ];
 const FONT_CHOICES = ["default", "system", "serif"];
 const FONT_LABELS = { default: "默认", system: "系统", serif: "衬线" };
-const MAX_STORED_MESSAGE_CHARS = 24000;
-const API_MESSAGE_LIMIT = 24;
-const API_CHAR_BUDGET = 22000;
-const MAX_SEARCH_SOURCES = 12;
+const MAX_STORED_MESSAGE_CHARS = getLimits().maxInputChars;
+const API_MESSAGE_LIMIT = getLimits().maxMessages;
+const API_CHAR_BUDGET = getLimits().historyChars;
+const MAX_SEARCH_SOURCES = getLimits().searchSources;
 const MAX_SEARCH_SUGGESTIONS_CHARS = 50000;
 const MAX_GROUNDED_HISTORY_AGE_MS = 2 * 365 * 24 * 60 * 60 * 1000;
 const mobileSidebarMedia = window.matchMedia("(max-width: 760px), (max-width: 1024px) and (max-height: 500px)");
@@ -225,7 +227,7 @@ const elements = {
 
 const state = {
   providers: [],
-  contextLimits: {maxInputChars:24000,maxMessages:24},
+  contextLimits: {maxInputChars:getLimits().maxInputChars,maxMessages:getLimits().maxMessages},
   contextReports: new Map(),
   defaultProvider: "",
   conversations: loadConversations(),
@@ -303,7 +305,7 @@ function validSearchResult(value) {
           .replace(/\s+/g, " ").trim().slice(0, 240) : "";
       sources.push({ title: title || new URL(url).hostname, url, ...(typeof item.excerpt === 'string' ? { excerpt: item.excerpt.slice(0, 900) } : {}) });
       sourceUrls.add(url);
-      if (sources.length >= MAX_SEARCH_SOURCES) break;
+      if (sources.length >= getLimits().searchSources) break;
     }
   }
   const queries = [];
@@ -315,7 +317,7 @@ function validSearchResult(value) {
       if (!query || querySet.has(query)) continue;
       queries.push(query);
       querySet.add(query);
-      if (queries.length >= 8) break;
+      if (queries.length >= getLimits().searchQueries) break;
     }
   }
   const suggestionsHtml = typeof value.suggestionsHtml === "string"
@@ -385,7 +387,8 @@ function setWorkspaceMenu(open, focusFirst = false) {
   }
 }
 
-function loadConversations(storage = scopedStorage) {
+function loadConversations(...args){return withStoredLimits(()=>loadConversationsStored(...args));}
+function loadConversationsStored(storage = scopedStorage) {
   try {
     const parsed = JSON.parse(storage.getItem(STORAGE_KEY) || "[]");
     if (!Array.isArray(parsed)) return [];
@@ -406,7 +409,7 @@ function loadConversations(storage = scopedStorage) {
         documents: validateDocuments(item.documents),
         webSearch: item.webSearch === true,
         instructions: typeof item.instructions === "string"
-          ? item.instructions.trim().slice(0, MAX_INSTRUCTIONS_CHARS) : "",
+          ? item.instructions.trim().slice(0, getLimits().instructionChars) : "",
         updatedAt: Number.isFinite(item.updatedAt) ? item.updatedAt : Date.now(),
         lastUsage: validUsage(item.lastUsage),
         messages: item.messages
@@ -467,10 +470,10 @@ function loadCustomPresets() {
       if (!item || typeof item.id !== "string" || !/^custom-[a-z0-9-]+$/i.test(item.id)
         || typeof item.name !== "string" || typeof item.instructions !== "string") return false;
       if (!item.name.trim() || item.name.length > 40 || !item.instructions.trim()
-        || item.instructions.length > MAX_INSTRUCTIONS_CHARS || seen.has(item.id)) return false;
+        || item.instructions.length > getLimits().instructionChars || seen.has(item.id)) return false;
       seen.add(item.id);
       return true;
-    }).slice(0, MAX_CUSTOM_PRESETS).map((item) => ({
+    }).slice(0, getLimits().customPresets).map((item) => ({
       id: item.id, name: item.name.trim(), instructions: item.instructions.trim(),
     }));
   } catch {
@@ -478,14 +481,15 @@ function loadCustomPresets() {
   }
 }
 
-function loadDrafts() {
+function loadDrafts(...args){return withStoredLimits(()=>loadDraftsStored(...args));}
+function loadDraftsStored() {
   try {
     const parsed = JSON.parse(scopedStorage.getItem(DRAFTS_KEY) || "{}");
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return Object.fromEntries(Object.entries(parsed)
       .filter(([id, content]) => typeof id === "string" && id.length <= 128
-        && typeof content === "string" && content.length <= 12000 && content.trim())
-      .slice(-31));
+        && typeof content === "string" && content.length <= getLimits().promptChars && content.trim())
+      .slice(-getLimits().draftCount));
   } catch {
     return {};
   }
@@ -534,7 +538,7 @@ function hasConversationContent(conversation) {
 
 function persistDrafts() {
   try {
-    const entries = Object.entries(state.drafts).filter(([, content]) => content.trim()).slice(-31);
+    const entries = Object.entries(state.drafts).filter(([, content]) => content.trim());
     scopedStorage.setItem(DRAFTS_KEY, JSON.stringify(Object.fromEntries(entries)));
     return true;
   } catch {
@@ -546,9 +550,17 @@ function persistDrafts() {
 function saveDraft(conversation = activeConversation(), content = elements.promptInput.value) {
   const key = draftKey(conversation);
   if (!key) return !content.trim();
-  // Keep the current draft newest when the persisted cache reaches 31 slots.
+  // Lowering policy must never truncate or evict an already saved draft.
   const entries = Object.entries(state.drafts).filter(([id]) => id !== key);
-  if (content.trim()) entries.push([key, content.slice(0, 12000)]);
+  if(content.length>MAXIMUM_LIMITS.promptChars)return false;
+  if(content.trim()){
+    if(!Object.hasOwn(state.drafts,key)&&entries.length>=getLimits().draftCount){
+      if(state.draftSaveWarning!==key)showToast(`已达到${getLimits().draftCount}份草稿预算，旧草稿保留。当前文字尚未自动保存，请先复制保留或清理不再需要的草稿。`);
+      state.draftSaveWarning=key;return false;
+    }
+    entries.push([key,content]);
+  }
+  state.draftSaveWarning=null;
   state.drafts = Object.fromEntries(entries);
   return persistDrafts();
 }
@@ -710,7 +722,7 @@ function syncModelOptions(conversation = activeConversation()) {
   syncWebSearchControl(conversation);
 }
 
-function createConversation() {
+function createConversation({restoredText = ""} = {}) {
   voiceComposer?.cancel();
   stopReading();
   saveDraft();
@@ -741,7 +753,8 @@ function createConversation() {
   };
   state.conversations.unshift(conversation);
   state.activeId = conversation.id;
-  delete state.drafts["new-conversation"];
+  if(restoredText)state.drafts["new-conversation"]=restoredText;
+  else delete state.drafts["new-conversation"];
   persistDrafts();
   elements.promptInput.value = "";
   resizeTextarea();
@@ -1595,7 +1608,7 @@ function updateContextPreview() {
     if(elements.contextSettingsDialog.open){const value=elements.contextHistoryTurns.value;settings.historyTurns=value==='auto'?null:Number(value);if(document.querySelector('#context-use-memory').checked)delete settings.useMemory;else settings.useMemory=false;if(document.querySelector('#context-use-personal').checked)delete settings.usePersonalInstructions;else settings.usePersonalInstructions=false;}
     const personal=personalInstructions?.preview(settings.usePersonalInstructions!==false)||{chars:0,loaded:false};
     const memory=settings.useMemory===false?{entries:[],chars:0}:accountMemory?.preview(settings.useMemory!==false)||{entries:[],chars:0};
-    const {report}=prepareChatContext([...(conversation?.messages||[]),{role:'user',content,images}],settings,{...state.contextLimits,...previewProjectInput(conversation),historyBudget:API_CHAR_BUDGET,maxMessages:API_MESSAGE_LIMIT,memoryChars:memory.chars,memoryCount:memory.entries.length,personalChars:personal.chars});
+    const {report}=prepareChatContext([...(conversation?.messages||[]),{role:'user',content,images}],settings,{...state.contextLimits,...previewProjectInput(conversation),historyBudget:getLimits().historyChars,maxMessages:getLimits().maxMessages,memoryChars:memory.chars,memoryCount:memory.entries.length,personalChars:personal.chars});
     detail.textContent=formatContextReport(report)+(accountUser&&settings.usePersonalInstructions!==false&&!personal.loaded?'\n账户通用指令尚未读取，可在设置中查看；发送时会读取。':'')+(accountUser&&memory.loaded===false?'\n长期记忆尚未读取，请打开“长期记忆”核对；发送时会重新读取。':'');
     elements.contextSummary.textContent=`下次 ${report.historyTurns} 轮${report.omittedMessages?` · 省略 ${report.omittedMessages} 条`:''}`;elements.contextSummary.title=detail.textContent;
   }catch(e){detail.textContent=e.message;elements.contextSummary.textContent='上下文需检查';elements.contextSummary.title=e.message;}
@@ -1965,11 +1978,11 @@ function saveCustomPreset() {
     showToast("请填写预设名称和回答方式。");
     return;
   }
-  if (name.length > 40 || instructions.length > MAX_INSTRUCTIONS_CHARS) {
-    showToast("预设名称最多 40 字，回答方式最多 2000 字。");
+  if (name.length > 40 || instructions.length > getLimits().instructionChars) {
+    showToast("预设名称最多 40 字，回答方式超过当前指令字符预算。");
     return;
   }
-  if (state.customPresets.length >= MAX_CUSTOM_PRESETS) {
+  if (state.customPresets.length >= getLimits().customPresets) {
     showToast("最多保存 20 个自建预设。请先删除不再使用的预设。");
     return;
   }
@@ -2016,8 +2029,8 @@ function updateCustomPreset() {
   if (!preset) return;
   const name = elements.presetName.value.replace(/\s+/g, " ").trim() || preset.name;
   const instructions = elements.instructionsInput.value.trim();
-  if (!instructions || name.length > 40 || instructions.length > MAX_INSTRUCTIONS_CHARS) {
-    showToast("回答方式不能为空，名称最多 40 字，回答方式最多 2000 字。");
+  if (!instructions || name.length > 40 || instructions.length > getLimits().instructionChars) {
+    showToast("回答方式不能为空，名称最多 40 字，回答方式超过当前指令字符预算。");
     return;
   }
   if ([...BUILTIN_PRESETS, ...state.customPresets].some((item) =>
@@ -2044,8 +2057,8 @@ function updateCustomPreset() {
 function applyInstructions() {
   const conversation = ensureConversation();
   const instructions = elements.instructionsInput.value.trim();
-  if (instructions.length > MAX_INSTRUCTIONS_CHARS) {
-    showToast("回答方式最多 2000 个字符。");
+  if (instructions.length > getLimits().instructionChars) {
+    showToast("回答方式超过当前指令字符预算。");
     return;
   }
   conversation.instructions = instructions;
@@ -2130,7 +2143,7 @@ function renderPromptLibrary() {
     });
     elements.promptLibraryList.append(button);
   }
-  elements.promptLibraryStatus.textContent = `${state.promptLibrary.length} / 30 条`;
+  elements.promptLibraryStatus.textContent = `${state.promptLibrary.length} / ${getLimits().prompts} 条`;
 }
 
 async function openPromptLibrary() {
@@ -2209,7 +2222,7 @@ function insertLibraryPrompt() {
   const rightGap = after && !after.startsWith("\n") ? "\n\n" : "";
   const next = `${before}${leftGap}${content}${rightGap}${after}`;
   if (next.length > input.maxLength) {
-    showToast("插入后会超过输入框的 12000 字限制。");
+    showToast("插入后会超过当前输入框字符预算。");
     return;
   }
   input.value = next;
@@ -2242,7 +2255,7 @@ async function importPromptLibraryFile() {
   const file = elements.importPromptLibraryFile.files?.[0];
   elements.importPromptLibraryFile.value = "";
   if (!file) return;
-  if (!file.name.toLocaleLowerCase().endsWith(".json") || file.size > 512 * 1024) {
+  if (!file.name.toLocaleLowerCase().endsWith(".json") || file.size > Math.max(512*1024,getLimits().promptLibraryBytes)) {
     showToast("请选择不超过 512 KiB 的 JSON 提示词文件。");
     return;
   }
@@ -2385,8 +2398,8 @@ async function loadProviders() {
     }
 
     state.providers = payload.providers;
-    state.contextLimits={maxInputChars:Number.isInteger(payload.limits?.maxInputChars)?payload.limits.maxInputChars:24000,maxMessages:24};
-    requestQueue.setLimit(Number.isInteger(payload.concurrentRequests) ? Math.max(1, Math.min(2, payload.concurrentRequests)) : 2);
+    state.contextLimits={maxInputChars:Number.isInteger(payload.limits?.maxInputChars)?payload.limits.maxInputChars:24000,maxMessages:Number.isInteger(payload.limits?.maxMessages)?payload.limits.maxMessages:getLimits().maxMessages};
+    requestQueue.setLimit(Number.isInteger(payload.concurrentRequests) ? Math.max(1, Math.min(8, payload.concurrentRequests)) : 2);
     state.defaultProvider = payload.defaultProvider;
     state.features = {
       sharedConversations: payload.features?.sharedConversations === true,
@@ -2445,7 +2458,7 @@ async function loadProviders() {
 }
 
 function compactMessages(messages, context, projectInput = {}) {
-  return prepareChatContext(messages,context,{...state.contextLimits,...projectInput,maxMessages:API_MESSAGE_LIMIT,historyBudget:API_CHAR_BUDGET}).messages;
+  return prepareChatContext(messages,context,{...state.contextLimits,...projectInput,maxMessages:getLimits().maxMessages,historyBudget:getLimits().historyChars}).messages;
 }
 
 function restorePrompt(content) {
@@ -2473,7 +2486,7 @@ async function requestConversation(conversation, userMessage, replacementAssista
       partialReply = { role: 'assistant', content: '', createdAt: Date.now(), completion: 'interrupted', streaming: true };
       conversation.messages.push(partialReply);
     }
-    if (partialReply.content.length + text.length > 240000) throw new Error('回复超过本次大小限制，已收到的内容已保留。');
+    if (partialReply.content.length + text.length > getLimits().replyChars) throw new Error('回复超过本次大小限制，已收到的内容已保留。');
     partialReply.content += text;
     conversation.updatedAt = Date.now();
     if (!paintTimer) paintTimer = setTimeout(() => {
@@ -2516,7 +2529,7 @@ async function requestConversation(conversation, userMessage, replacementAssista
     }
     if (gatewayToken && !accountUser) headers.authorization = `Bearer ${gatewayToken}`;
 
-    const prepared=prepareChatContext(replacementAssistant?conversation.messages.slice(0,-1):conversation.messages,conversation.context,{...state.contextLimits,...projectInput,maxMessages:API_MESSAGE_LIMIT,historyBudget:API_CHAR_BUDGET,memoryChars:memory.chars,memoryCount:memory.entries.length,personalChars:personal.chars});
+    const prepared=prepareChatContext(replacementAssistant?conversation.messages.slice(0,-1):conversation.messages,conversation.context,{...state.contextLimits,...projectInput,maxMessages:getLimits().maxMessages,historyBudget:getLimits().historyChars,memoryChars:memory.chars,memoryCount:memory.entries.length,personalChars:personal.chars});
     state.contextReports.set(conversation.id,prepared.report);
     accountMemory.record(conversation.id,memory.entries);
     const response = await fetchQueuedChat("/api/chat", {
@@ -2732,13 +2745,13 @@ async function startParallelTaskBatch() {
   if (state.parallelBatchRunning || state.providers.length === 0) return;
   const prompts = elements.parallelTaskInput.value.split(/\r?\n/)
     .map((item) => item.trim()).filter(Boolean);
-  if (prompts.length < 2 || prompts.length > 6) {
-    showToast("请填写 2 到 6 条任务，每行一条。");
+  if (prompts.length < 2 || prompts.length > getLimits().parallelTasks) {
+    showToast("请填写 当前任务数量预算内的至少2条任务，每行一条。");
     elements.parallelTaskInput.focus();
     return;
   }
-  if (prompts.some((item) => item.length > 6000)) {
-    showToast("单条并行任务不能超过 6000 字。");
+  if (prompts.some((item) => item.length > getLimits().promptChars)) {
+    showToast(`单条并行任务不能超过 ${getLimits().promptChars} 字。`);
     return;
   }
   const selectionIssue=chatSelectionProblem(activeConversation(),selectedProvider(),elements.modelIdSelect.value);
@@ -3055,7 +3068,7 @@ elements.composer.addEventListener("submit", (event) => {
       if (conversation?.webSearch) throw new Error('图片对话暂不同时联网搜索，请先关闭联网搜索。');
     }
     const storedSize = [...(conversation?.messages || []), { content, images }].reduce((total, message) => total + message.content.length + (message.images || []).reduce((n, image) => n + image.dataUrl.length, 0), 0);
-    if (storedSize > 4 * 1024 * 1024 - 256000) throw new Error('当前对话附件较多，请新建对话后发送；已有记录会保留。');
+    if (storedSize > getLimits().conversationChars - getLimits().promptChars) throw new Error('当前对话附件较多，请新建对话后发送；已有记录会保留。');
   } catch (error) { showToast(error.message); return; }
   if (images.length && !visionComposer.setImages([])) return;
   clearDraft(activeConversation());
@@ -3118,7 +3131,7 @@ elements.webSearchToggle?.addEventListener("change", () => {
       : provider.id === "gemini"
       ? "已开启 Google 搜索；当前对话会发送给 Google，搜索与模型调用会产生额外用量。"
       : provider.id === "openrouter"
-        ? "已开启 OpenRouter 联网搜索；模型可搜索最多 2 次，并会从余额中计费。"
+        ? `已开启 OpenRouter 联网搜索；${getLimits().searchUses?`每次回答最多搜索 ${getLimits().searchUses} 次`:'本站不另设搜索次数，实际依服务商'}，服务商可能计费。`
         : "已开启联网搜索；当前对话会发送给服务商，并可能产生多次搜索费用。"
     : "已关闭当前对话的联网搜索。");
 });
@@ -3572,7 +3585,12 @@ attachmentInput.accept = ".txt,.md,.csv,.json,.pdf,.docx,.png,.jpg,.jpeg,.webp";
 elements.attachTextButton.title = "添加文档或图片；图片支持直接看图或 OCR";
 elements.attachTextButton.setAttribute("aria-label", "添加文档或图片");
 
-applyFontChoice(loadFontChoice());
+for(const id of ['prompt-input','parallel-task-input'])document.getElementById(id).maxLength=getLimits().promptChars;
+ document.getElementById('instructions-input').maxLength=getLimits().instructionChars;
+ document.getElementById('library-prompt-content').maxLength=getLimits().promptText;
+ for(let n=11;n<=getLimits().historyTurns;n++)elements.contextHistoryTurns.append(new Option(n+'轮历史',String(n)));
+ document.getElementById('parallel-tasks-description').textContent=`每行一个独立任务，最多${getLimits().parallelTasks}条；按站点并发额度运行，其余排队。`;
+ applyFontChoice(loadFontChoice());
 const initialNewDraft = state.drafts['new-conversation'] || '';
 const hasNewDraft = Boolean(initialNewDraft.trim() || visionComposer.images('new-conversation').length);
 const initialConversation = hasNewDraft ? null
@@ -3580,8 +3598,7 @@ const initialConversation = hasNewDraft ? null
 if (initialConversation) {
   state.activeId = initialConversation.id;
 } else {
-  createConversation();
-  if (initialNewDraft) saveDraft(activeConversation(), initialNewDraft);
+  createConversation({restoredText:initialNewDraft});
 }
 setSidebar(false);
 render();
@@ -3653,6 +3670,7 @@ personalInstructions=initPersonalInstructions({user:accountUser,currentUser:()=>
 privateShares=initPrivateShares({user:accountUser,currentUser:()=>accountUser,identityChanged,active:activeConversation,busy:()=>state.backgroundRequests.size>0||state.backupImportPending,toast:showToast});
 modelConnections=initModelConnections({user:accountUser,reloadProviders:loadProviders,toast:showToast,identityChanged,busy:()=>state.busy||Boolean(activeBackgroundRequest())||state.backgroundRequests.size>0});
 accountMemory=initAccountMemory({user:accountUser,currentUser:()=>accountUser,identityChanged,toast:showToast,changed:updateContextPreview,active:activeConversation});
+initSiteAdministration({beforeReload:()=>{if(state.backgroundRequests.size||state.backupImportPending||privateSync?.running||modelConnections?.isBusy())throw Error('请先完成生成、同步和其他编辑，再重新载入。');if(!saveDraft()&&elements.promptInput.value.trim())throw Error('草稿尚未保存，请先复制保留。');if(writingDesk&&!writingDesk.flush())throw Error('请先保存或导出文稿。');}});
 void loadProviders();
 window.setInterval(() => {
   if (accountUser) { if (!state.backgroundRequests.size) void privateSync?.sync().then(() => projects.refresh().catch(() => {})); return; }

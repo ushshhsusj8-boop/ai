@@ -1,22 +1,23 @@
+import {getLimits,MAXIMUM_LIMITS} from './site_limits.js';
 import { buildChatContext } from './conversation_tools.js';
 
 // Both the draft preview and the real request use this preparation step.
 export function prepareChatContext(messages, settings, {
-  instructions = '', documents = [], maxInputChars = 24000,
-  maxMessages = 24, historyBudget = 22000, memoryChars = 0, memoryCount = 0, personalChars = 0,
+  instructions = '', documents = [], maxInputChars = getLimits().maxInputChars,
+  maxMessages = getLimits().maxMessages, historyBudget = getLimits().historyChars, memoryChars = 0, memoryCount = 0, personalChars = 0,
 } = {}) {
-  if (!Number.isInteger(maxInputChars) || maxInputChars < 1000 || maxInputChars > 200000) {
+  if (!Number.isInteger(maxInputChars) || maxInputChars < 1000 || maxInputChars > MAXIMUM_LIMITS.maxInputChars) {
     throw Error('本站上下文限制无效，请重新连接。');
   }
   instructions = typeof instructions === 'string' ? instructions.trim() : '';
-  if (instructions.length > 2000) throw Error('项目和对话指令合计超过2000字符，请缩短。');
-  if(!Number.isSafeInteger(memoryChars)||memoryChars<0||memoryChars>4000)throw Error('记忆预算无效。');
-  if(!Number.isSafeInteger(personalChars)||personalChars<0||personalChars>2200)throw Error('通用指令预算无效。');
+  if (instructions.length > getLimits().instructionChars) throw Error('项目和对话指令合计超过2000字符，请缩短。');
+  if(!Number.isSafeInteger(memoryChars)||memoryChars<0||memoryChars>getLimits().memoryContext)throw Error('记忆预算无效。');
+  if(!Number.isSafeInteger(personalChars)||personalChars<0||personalChars>getLimits().personalInstructionChars+200)throw Error('通用指令预算无效。');
   const documentCount = documents.filter(d => d.enabled !== false).length;
   const latest = [...messages].reverse().find(m => m?.role === 'user');
   const questionChars = latest?.content?.length || 0;
   const documentReserve = documentCount
-    ? Math.min(8000, Math.max(500, maxInputChars - instructions.length - memoryChars - personalChars - questionChars)) : 0;
+    ? Math.min(getLimits().documentContextChars, Math.max(500, maxInputChars - instructions.length - memoryChars - personalChars - questionChars)) : 0;
   const messageBudget = Math.min(historyBudget, maxInputChars - instructions.length - memoryChars - personalChars - documentReserve);
   if (questionChars > messageBudget) {
     throw Error(documentCount
@@ -51,7 +52,7 @@ export function formatContextReport(report) {
   const range = prior.length ? `历史第 ${historicalRanges(prior)} 条` : '没有历史消息';
   const reasons = report.reasons.length ? `，原因：${report.reasons.join('、')}` : '';
   return `携带 ${report.historyTurns} 轮历史（${range}），省略 ${report.omittedMessages} 条历史${reasons}。当前问题另计；原消息仍保留。\n`
-    + `消息文字 ${report.messageChars}/${report.messageBudget} 字符，指令 ${report.instructionChars} 字符，图片 ${report.imageCount}/8。本站总输入上限 ${report.inputLimit} 字符。\n`
+    + `消息文字 ${report.messageChars}/${report.messageBudget} 字符，指令 ${report.instructionChars} 字符，图片 ${report.imageCount}/${getLimits().contextImages}。本站总输入上限 ${report.inputLimit} 字符。\n`
     + (report.personalChars ? `账户通用指令 ${report.personalChars} 字符（包括来源说明）；在设置中查看。\n` : '')
     + (report.memoryChars ? `长期记忆 ${report.memoryCount} 条，占 ${report.memoryChars} 字符；可在长期记忆面板查看内容。\n` : '')
     + (report.documentCount ? `启用 ${report.documentCount} 份资料，给引用片段至少预留 ${report.documentReserve} 字符；实际片段由服务器检索选择。\n` : '')

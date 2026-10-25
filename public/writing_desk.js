@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import {scopedStorage,globalStorage,getStorageScope} from './scoped_storage.js';
 import {createWritingStore} from './writing_store.js';
 import {trapSidebarTab} from './accessibility.js';
@@ -10,7 +11,7 @@ export function initWritingDesk({insert,toast,userId=null,onIdentityChanged}) {
     <div class="writing-library"><label class="sr-only" for="writing-select">已保存的本机文稿</label><select id="writing-select"></select><button type="button" id="writing-new">新文稿</button></div>
     <label class="sr-only" for="writing-title">文稿名称</label><input id="writing-title" maxlength="80" placeholder="给文稿起个名字">
     <div class="writing-tabs" role="group" aria-label="文稿显示"><button id="writing-edit" type="button" aria-pressed="true">编辑</button><button id="writing-preview" type="button" aria-pressed="false">预览</button><span id="writing-count"></span></div>
-    <label class="sr-only" for="writing-text">文稿内容</label><textarea id="writing-text" maxlength="256000" spellcheck="false" placeholder="写下草稿，或从 AI 回复中打开一份文稿…"></textarea><div id="writing-render" class="message-text" hidden></div>
+    <label class="sr-only" for="writing-text">文稿内容</label><textarea id="writing-text" maxlength="${getLimits().writingText}" spellcheck="false" placeholder="写下草稿，或从 AI 回复中打开一份文稿…"></textarea><div id="writing-render" class="message-text" hidden></div>
     <p id="writing-status" role="status" aria-live="polite"></p><p id="writing-sync-status" role="status" aria-live="polite" hidden></p><div class="writing-sync-actions" hidden><button id="writing-sync-now" type="button">立即同步</button><button id="writing-conflicts" type="button" hidden>处理冲突</button><button id="writing-import-local" type="button">导入访客文稿</button></div><p class="ui-note" id="writing-storage-note"></p>
     <footer class="writing-actions"><button id="writing-save" type="button">保存</button><button id="writing-copy" type="button">另存副本</button><button id="writing-insert" type="button">放入聊天草稿</button><button id="writing-export" type="button">导出 Markdown</button><button id="writing-delete" type="button">删除</button></footer>`;
   document.querySelector('.app-shell').append(panel);

@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import {documentMatches} from './document_search.js';
 export const UI_DEFAULTS = Object.freeze({theme:'system', density:'comfortable', textSize:16, readingWidth:'standard'});
 export function uiPreferences(value) {
@@ -24,7 +25,7 @@ function excerpt(text, terms) {
   const start = Math.max(0, at-30); return (start ? '…' : '') + text.slice(start,start+150).replace(/\s+/g,' ') + (text.length>start+150?'…':'');
 }
 /** Search the current account's supplied data only. No remote/public search or model request. */
-export function searchWorkspace({conversations=[], projects=[], notes=[], query='', kind='all', limit=60}) {
+export function searchWorkspace({conversations=[], projects=[], notes=[], query='', kind='all', limit=getLimits().searchDisplay}) {
   const terms = String(query).trim().toLocaleLowerCase().slice(0,200).split(/\s+/).filter(Boolean);
   const matches = text => terms.every(t=>String(text || '').toLocaleLowerCase().includes(t));
   const result = [], add = item => {if(result.length<limit)result.push(item);};

@@ -1,10 +1,12 @@
+import {withStoredLimits} from '../public/site_limits.js';
 import {randomBytes} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,statSync,openSync,writeFileSync,fsyncSync,closeSync,renameSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
-import {validateMemories,memoryContext,MEMORY_LIMITS} from '../public/memory_tools.js';
+import {validateMemories,validateMemoryChange,memoryContext,MEMORY_LIMITS} from '../public/memory_tools.js';
 const fail=(message,statusCode=400)=>{throw Object.assign(Error(message),{statusCode});};
 export function createAccountMemory(directory,{requireUser}) {
-  function read(userId) {
+  function read(...args){return withStoredLimits(()=>readStored(...args));}
+  function readStored(userId) {
     requireUser(userId); const file=join(directory,userId+'.json');
     if(!existsSync(file))return {file,value:{version:1,userId,revision:0,library:{enabled:true,entries:[]}}};
     if(statSync(file).size>MEMORY_LIMITS.backup)throw Error('Private memory storage exceeds its limit');
@@ -17,12 +19,13 @@ export function createAccountMemory(directory,{requireUser}) {
     list(userId){return envelope(read(userId).value);},
     put(userId,body={}){
       if(Object.keys(body).some(k=>!['revision','library'].includes(k))||!Number.isSafeInteger(body.revision)||body.revision<0)fail('记忆版本或字段无效。');
-      let library;try{library=validateMemories(body.library);}catch(error){fail(error.message);}
       const {file,value}=read(userId);
       if(value.revision!==body.revision)fail('记忆已在其他设备修改，未覆盖任何内容。请重新读取后核对，编辑草稿保留。',409);
+      let library,restrictiveOnly;try{({library,restrictiveOnly}=validateMemoryChange(body.library,value.library));}catch(error){fail(error.message);}
       if(value.revision===Number.MAX_SAFE_INTEGER)fail('记忆版本已达上限。',413);
       const next={version:1,userId,revision:value.revision+1,library},serialized=JSON.stringify(next);
-      if(Buffer.byteLength(serialized)>MEMORY_LIMITS.backup)fail('记忆容量已满。',413);
+      const byteLimit=restrictiveOnly?withStoredLimits(()=>MEMORY_LIMITS.backup):MEMORY_LIMITS.backup;
+      if(Buffer.byteLength(serialized)>byteLimit)fail('记忆容量已满。',413);
       mkdirSync(directory,{recursive:true,mode:0o700});const temp=file+'.'+randomBytes(12).toString('hex')+'.tmp';let handle;
       try{handle=openSync(temp,'wx',0o600);writeFileSync(handle,serialized,'utf8');fsyncSync(handle);closeSync(handle);handle=undefined;renameSync(temp,file);}finally{if(handle!==undefined)closeSync(handle);rmSync(temp,{force:true});}
       return envelope(next);

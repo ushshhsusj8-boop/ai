@@ -1,3 +1,4 @@
+import {getLimits,withStoredLimits} from '../public/site_limits.js';
 import { createHash, randomBytes, randomUUID, scrypt as deriveKey, timingSafeEqual } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -16,9 +17,6 @@ import {createAccountShares} from './account_shares.mjs';
 const scrypt = promisify(deriveKey);
 const DAY = 86_400_000;
 const MAX_USERS = 500;
-const MAX_CONVERSATIONS = 1000;
-const MAX_CONVERSATION_RECORDS = 10_000;
-const MAX_WORKSPACE_BYTES = 64 * 1024 * 1024;
 const MAX_ACCOUNT_BYTES = 4 * 1024 * 1024;
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const CHAT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{7,79}$/;
@@ -110,13 +108,14 @@ export function createAccountStore(filePath, { now = Date.now, sessionDays = 30 
     next.sessions.push({ digest: digest(sessionToken), userId: user.id, createdAt: time, expiresAt, device: deviceLabel(agent) });
     return { user: publicUser(user), sessionToken, expiresAt };
   }
-  function workspace(id) {
+  function workspace(...args){return withStoredLimits(()=>workspaceStored(...args));}
+  function workspaceStored(id) {
     userFor(id);
     const target = join(workspaceDirectory, `${id}.json`);
-    const value = existsSync(target) ? readFile(target, MAX_WORKSPACE_BYTES)
+    const value = existsSync(target) ? readFile(target, getLimits().cloudWorkspaceBytes)
       : { version: 1, userId: id, conversations: [], projects: emptyProjects(), projectsRevision: 0 };
     if (!value || value.version !== 1 || value.userId !== id || !Array.isArray(value.conversations)
-      || value.conversations.length > MAX_CONVERSATION_RECORDS || !Number.isSafeInteger(value.projectsRevision) || value.projectsRevision < 0) {
+      || value.conversations.length > Math.max(10000,getLimits().cloudConversations*2) || !Number.isSafeInteger(value.projectsRevision) || value.projectsRevision < 0) {
       throw Error('Invalid private workspace; refusing to replace existing data');
     }
     const ids = new Set();
@@ -148,6 +147,9 @@ export function createAccountStore(filePath, { now = Date.now, sessionDays = 30 
   const codeHistory=createHistoryCloudStore(`${file}.code-history`,{requireUser:userFor});
   const originals=createProjectOriginalStore(`${file}.originals`,{requireUser:userFor,getProjects:id=>workspace(id).value.projects,now});
   return Object.freeze({
+    administrationFile:file+'.administration.json',
+    findUserByUsername(name){const user=state.users.find(u=>u.username===(typeof name==='string'?name.toLowerCase():''));return user?publicUser(user):null;},
+    requireUser(id){return publicUser(userFor(id));},
     listPrompts:prompts.list,putPrompts:prompts.put,
     getConnections:connections.get,putConnections:connections.save,connectionProviders:connections.providers,resolveConnection:connections.resolve,
     listMemories:memory.list,putMemories:memory.put,resolveMemories:memory.resolve,
@@ -158,7 +160,7 @@ export function createAccountStore(filePath, { now = Date.now, sessionDays = 30 
     listOriginals: originals.list, uploadOriginal: originals.upload, downloadOriginal: originals.download, deleteOriginal: originals.remove,
     exportOriginals: originals.export.bind(originals),
     restoreOriginals: originals.restore.bind(originals),
-    limits: Object.freeze({ maxConversations: MAX_CONVERSATIONS, workspaceBytes: MAX_WORKSPACE_BYTES, maxProjects: 20 }),
+    limits: Object.freeze({ get maxConversations(){return getLimits().cloudConversations}, get workspaceBytes(){return getLimits().cloudWorkspaceBytes}, get maxProjects(){return getLimits().projects} }),
     async register({ username, password: secret, displayName } = {}, { userAgent } = {}) {
       if (typeof username !== 'string' || !usernamePattern.test(username)) fail('用户名须为 3–32 位英文字母、数字、下划线、短横线或点。');
       username = username.toLowerCase(); password(secret);
@@ -244,11 +246,11 @@ export function createAccountStore(filePath, { now = Date.now, sessionDays = 30 
       if (conversation.id !== conversationId) fail('对话编号不一致。');
       const { target, value } = workspace(id), index = value.conversations.findIndex(item => item.id === conversationId), previous = value.conversations[index];
       if (previous ? previous.revision !== body.revision || previous.deleted : body.revision !== 0) conflict();
-      if (index < 0 && value.conversations.filter(item => !item.deleted).length >= MAX_CONVERSATIONS) fail('云端对话数量已满，请先备份并清理。', 413);
-      if (index < 0 && value.conversations.length >= MAX_CONVERSATION_RECORDS) fail('历史对话编号已达上限，请联系管理员清理。', 413);
+      if (index < 0 && value.conversations.filter(item => !item.deleted).length >= getLimits().cloudConversations) fail('云端对话数量已满，请先备份并清理。', 413);
+      if (index < 0 && value.conversations.length >= Math.max(10000,getLimits().cloudConversations*2)) fail('历史对话编号已达上限，请联系管理员清理。', 413);
       const entry = { id: conversationId, conversation, revision: (previous?.revision || 0) + 1 };
       if (index < 0) value.conversations.push(entry); else value.conversations[index] = entry;
-      atomicWrite(target, value, MAX_WORKSPACE_BYTES);
+      atomicWrite(target, value, getLimits().cloudWorkspaceBytes);
       return { userId: id, conversation: copy(conversation), revision: entry.revision };
     },
     deleteConversation(id, conversationId, expectedRevision) {
@@ -258,16 +260,18 @@ export function createAccountStore(filePath, { now = Date.now, sessionDays = 30 
       value.conversations[index] = { id: conversationId, revision: item.revision + 1, deleted: true };
       value.projects.links = value.projects.links.filter(link => link.conversationId !== conversationId);
       value.projectsRevision += 1;
-      atomicWrite(target, value, MAX_WORKSPACE_BYTES); return { userId: id, deleted: true, revision: item.revision + 1, projectsRevision: value.projectsRevision };
+      // Permit incremental cleanup without treating the retained old chats as
+      // new content. Uploads and edits still use the current intake budget.
+      withStoredLimits(()=>atomicWrite(target, value, getLimits().cloudWorkspaceBytes)); return { userId: id, deleted: true, revision: item.revision + 1, projectsRevision: value.projectsRevision };
     },
     getProjects(id) { const { value } = workspace(id); return { userId: id, projects: copy(value.projects), revision: value.projectsRevision }; },
     putProjects(id, body = {}) {
       revision(body.revision); let projects;
-      if (Buffer.byteLength(JSON.stringify(body.projects) || '') > PROJECT_BYTES) fail('项目库已满（16 MiB），请先导出并清理资料。', 413);
+      if (Buffer.byteLength(JSON.stringify(body.projects) || '') > getLimits().projectBytes) fail('项目库已满（16 MiB），请先导出并清理资料。', 413);
       try { projects = validateProjects(body.projects); } catch (error) { fail(error.message); }
       const { target, value } = workspace(id);
       if (value.projectsRevision !== body.revision) conflict();
-      value.projects = projects; value.projectsRevision += 1; atomicWrite(target, value, MAX_WORKSPACE_BYTES);
+      value.projects = projects; value.projectsRevision += 1; atomicWrite(target, value, getLimits().cloudWorkspaceBytes);
       return { userId: id, projects: copy(projects), revision: value.projectsRevision };
     },
   });

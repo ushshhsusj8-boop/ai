@@ -2,11 +2,12 @@ import { configureStorageScope, globalStorage } from './scoped_storage.js';
 
 export let accountUser = null;
 export let accountsEnabled = false;
+export let accountAdministration=null;
 export const accountReady = (async () => {
   const response = await fetch('/api/account/session', {cache: 'no-store', credentials: 'same-origin'});
   if (response.status === 404) { configureStorageScope(null); return; }
   if (!response.ok) throw Error('无法确认登录状态，请刷新重试。');
-  const data = await response.json(); accountsEnabled = data.enabled === true; accountUser = data.user || null;
+  const data = await response.json(); accountsEnabled = data.enabled === true; accountUser = data.user || null;accountAdministration=data.administration||null;
   configureStorageScope(accountUser?.id || null);
 })();
 try { await accountReady; } catch {

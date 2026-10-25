@@ -2,7 +2,7 @@
 
 一个可自行部署的多模型 AI 聊天工作空间，使用 Node.js 和浏览器原生 JavaScript。
 
-[English](README.md) · [安装与资料保管](docs/SETUP.md) · [功能与边界](docs/FEATURES.md)
+[English](README.md) · [安装与资料保管](docs/SETUP.md) · [功能与边界](docs/FEATURES.md) · [所有者与开发者额度](docs/DEVELOPER_ADMIN.md)
 
 支持流式回复、失败重试、独立对话指令、多段生成队列、分支与版本；个人账户、项目资料、提示词库、写作画布和明确保存的长期记忆可跨设备同步。资料可按页或段落搜索、阅读原文，PDF 可手选页面 OCR；原文件支持私有保管与 ZIP 备份、预览确认恢复。
 
@@ -11,6 +11,8 @@
 支持勾选文字、本机预览后创建限时只读分享，并在账户内撤销。持链接者可读，已阅读或复制的内容无法追回。
 
 界面提供输入框展开工具、深浅主题、公式显示、表格 CSV、键盘操作和手机布局。可选的 Linux 代码执行器独立配置，只有明确点击运行才会执行。
+
+站点所有者可自行绑定已有账户，再指定管理员和调整共享使用预算。调低预算后保留旧资料，明确删除/暂停/关闭及分享撤销继续可用；新增和修改仍按当前预算。
 
 ## 本机启动
 
@@ -27,7 +29,7 @@ node -e "require('node:fs').writeFileSync('secrets/gateway_access_token',require
 
 ## 验证
 
-运行 `npm run check` 和 `npm test`。初始源码共361项测试；Windows 357通过、4项Linux专属跳过。测试使用临时合成资料和模拟模型，无需真实服务商凭据。仓库提供Windows/Linux CI配置，是否执行通过以实际Actions结果为准。
+运行 `npm run check` 和 `npm test`。初始源码共385项测试；Windows 381通过、4项Linux专属跳过。测试使用临时合成资料和模拟模型，无需真实服务商凭据。仓库提供Windows/Linux CI配置，是否执行通过以实际Actions结果为准。
 
 ## 开源范围
 

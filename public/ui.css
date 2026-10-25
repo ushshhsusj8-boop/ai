@@ -7,6 +7,18 @@
   --ui-hover:#eeeeee; --ui-user:#f3f3f3; --ui-code:#f7f7f8; --message-font-size:16px;
   font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
 }
+
+#site-administration-dialog {font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;width:min(720px,calc(100vw - 24px));}
+#site-administration-dialog .dialog-card {max-height:calc(100dvh - 32px);overflow:auto;}
+#site-administration-dialog h2 {font-size:19px;}
+#site-administration-dialog p {font-size:13px;line-height:1.7;color:var(--muted);overflow-wrap:anywhere;}
+#site-admin-fields details {border-top:1px solid var(--line);padding:8px 0;}
+#site-admin-fields summary {cursor:pointer;font-size:14px;font-weight:600;min-height:40px;padding:10px 0;}
+#site-administration-dialog label {display:block;font-size:13px;line-height:1.5;margin-top:12px;}
+#site-administration-dialog input,#site-administration-dialog select {width:100%;margin-top:5px;min-height:42px;}
+#site-administration-dialog .project-actions {margin:16px 0;}
+#site-administration-dialog button {min-height:40px;}
+#site-admin-members p {display:flex;align-items:center;justify-content:space-between;gap:12px;}
 :root[data-theme="dark"] {
   color-scheme:dark; --paper:#212121; --paper-deep:#181818; --surface:#272727; --surface-solid:#272727;
   --ink:#ececec; --muted:#a8a8a8; --line:#3b3b3b; --green:#84d2af; --green-dark:#ace4c8;

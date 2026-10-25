@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import { scopedStorage } from './scoped_storage.js';
 import { parseDocument, formatDocument } from './documents.js';
 import {pdfCoverage} from './pdf_coverage.js';
@@ -86,8 +87,8 @@ export function initWorkbench(callbacks) {
   review.setAttribute('aria-labelledby', 'attachment-review-title');
   review.innerHTML = `<div class="dialog-card"><div class="dialog-heading"><div><span class="dialog-kicker">附件工作区</span><h2 id="attachment-review-title">检查文件内容</h2></div><button class="icon-button" id="attachment-close" type="button" aria-label="取消文件导入">×</button></div><p>文件在浏览器内解析。先检查文字，再插入消息；点击发送后才会交给模型。</p><div id="attachment-files" class="attachment-files" role="group" aria-label="选择待检查文件"></div><p id="attachment-status" role="status"></p><label class="token-label" for="attachment-text">解析文字（可修改）</label><textarea id="attachment-text" rows="12" maxlength="6000" spellcheck="false"></textarea><div class="dialog-actions"><button class="text-button" id="attachment-remove" type="button">移除此文件</button><button class="secondary-button" id="attachment-cancel" type="button">取消</button><button class="primary-button" id="attachment-insert" type="button" disabled>插入消息</button></div></div>`;
   document.body.append(review);
-  review.querySelector('.dialog-heading + p').textContent = '文档加入当前对话资料，后续提问自动检索相关片段；最多 3 份、每份 12 万字符、PDF 200 页。资料随当前对话保存，发送问题后相关片段交给模型。图片支持直接看图或 OCR。';
-  review.querySelector('#attachment-text').maxLength = 120000;
+  review.querySelector('.dialog-heading + p').textContent = `文档加入当前对话资料，后续提问自动检索相关片段；最多 ${getLimits().documentCount} 份、每份 ${getLimits().documentChars} 字符、PDF ${getLimits().pdfPages} 页。资料随当前对话保存，发送问题后相关片段交给模型。图片支持直接看图或 OCR。`;
+  review.querySelector('#attachment-text').maxLength = getLimits().documentChars;
   review.querySelector('#attachment-insert').textContent = '添加到当前对话';
   const imagePreview = document.createElement('img'); imagePreview.id = 'attachment-image-preview'; imagePreview.alt = '待发送图片'; imagePreview.hidden = true;
   const ocr = document.createElement('button'); ocr.type = 'button'; ocr.id = 'attachment-ocr'; ocr.className = 'secondary-button'; ocr.textContent = '改为 OCR 文字'; ocr.hidden = true;
@@ -117,7 +118,7 @@ export function initWorkbench(callbacks) {
     insert.disabled = parsing || !files.length;
     if (!parsing) status.textContent = file?.image
       ? `${file.name} · ${file.image.width} × ${file.image.height} · 已压缩；${callbacks.visionSupported() ? '当前型号支持看图' : '发送前请选择标有“看图”的型号，或改用 OCR'}`
-      : file ? `${file.name} · ${file.text.length} 字${file.truncated ? ' · 内容较长，已截取前 6000 字' : ''} ${pdfCoverage(file.pdfInfo)}` : '没有待插入的文件。';
+      : file ? `${file.name} · ${file.text.length} 字${file.truncated ? ` · 内容较长，已截取前 ${getLimits().textAttachmentChars} 字` : ''} ${pdfCoverage(file.pdfInfo)}` : '没有待插入的文件。';
   }
   ocr.onclick = async () => {
     const file = files[selected]; if (!file?.image || parsing) return;
@@ -142,7 +143,7 @@ export function initWorkbench(callbacks) {
   async function openFiles(input) {
     if (parsing || callbacks.busy()) return callbacks.toast('请等待当前任务完成后添加文件。');
     if (!input.length) return;
-    if (input.length > 3) return callbacks.toast('一次最多添加 3 个文件。');
+    if (input.length > Math.max(getLimits().documentCount,getLimits().imagesPerMessage)) return callbacks.toast('一次最多添加 3 个文件。');
     files = []; selected = 0; context = callbacks.context(); parsing = true; parseController = new AbortController(); showFiles(); review.showModal();
     try {
       for (const file of input) {

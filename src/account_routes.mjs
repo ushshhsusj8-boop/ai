@@ -1,10 +1,11 @@
+import {getLimits,MAXIMUM_LIMITS} from '../public/site_limits.js';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import {ORIGINAL_LIMITS} from '../public/project_originals.js';
 
 async function readOriginal(request,limit=ORIGINAL_LIMITS.maxFileBytes) {
   if (request.headers['content-type'] !== 'application/octet-stream') throw error('原文件须以二进制上传。', 415);
   const declared = request.headers['content-length'];
-  const sizeError=limit===ORIGINAL_LIMITS.maxFileBytes?'原文件最多5 MiB。':'原文件ZIP最多65 MiB。';
+  const sizeError=`上传超过本次上限 ${limit/1048576} MiB。`;
   if (declared !== undefined && (!/^\d+$/.test(declared) || Number(declared) > limit)) throw error(sizeError, 413);
   const parts = []; let length = 0;
   for await (const chunk of request) { length += chunk.length; if (length > limit) throw error(sizeError, 413); parts.push(chunk); }
@@ -36,7 +37,7 @@ function assertSameOrigin(request, config, mutation) {
 }
 
 /** Mount before the legacy gateway Bearer guard; account cookies do not grant shared-space access. */
-export function createAccountRoutes({ store, config, readJson, sendJson, clientIp = request => request.socket.remoteAddress || 'unknown', now = Date.now }) {
+export function createAccountRoutes({ store, administration, config, readJson, sendJson, clientIp = request => request.socket.remoteAddress || 'unknown', now = Date.now }) {
   const cookieName = config.nodeEnv === 'production' ? PRODUCTION_COOKIE : COOKIE;
   const buckets = new Map();
   let credentialRequests = 0;
@@ -89,7 +90,7 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
       assertSameOrigin(request, config, !['GET', 'HEAD', 'OPTIONS'].includes(method));
       if (path === '/session' && method === 'GET') {
         const session = authenticate(request);
-        sendJson(response, 200, { enabled: Boolean(store), user: session?.user || null, ...(session ? { expiresAt: session.expiresAt, limits: store.limits } : {}) }, headers); return true;
+        sendJson(response, 200, { enabled: Boolean(store), user: session?.user || null, ...(session ? { expiresAt: session.expiresAt, limits: store.limits, ...(administration?{administration:administration.access(session.user.id)}:{}) } : {}) }, headers); return true;
       }
       if (!store) throw error('个人账号服务尚未启用。', 503);
       if (path === '/register' && method === 'POST') {
@@ -126,11 +127,15 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
         sendJson(response, 200, { user: null, message: '密码已修改，所有设备已退出登录，请用新密码登录。' }, { ...headers, 'set-cookie': cookie() }); return true;
       }
       const session = requireSession(request, true), id = session.user.id;
+      if(path==='/administration/claim'&&method==='POST'){if(!administration)throw error('站点管理尚未启用。',503);rateLimit('owner-claim-ip:'+clientIp(request,config),5,15*MINUTE);rateLimit('owner-claim-user:'+id,5,15*MINUTE);rateLimit('owner-claim-global',100,15*MINUTE);const input=await body(request,1024);requireSession(request,true);sendJson(response,200,administration.claimOwner(id,input),headers);return true;}
+      if(path==='/administration'&&method==='GET'){if(!administration)throw error('站点管理尚未启用。',503);sendJson(response,200,administration.view(id),headers);return true;}
+      if(path==='/administration/limits'&&method==='PUT'){if(!administration)throw error('站点管理尚未启用。',503);const input=await body(request,32*1024);requireSession(request,true);sendJson(response,200,administration.putLimits(id,input),headers);return true;}
+      if(path==='/administration/administrators'&&method==='PUT'){if(!administration)throw error('站点管理尚未启用。',503);const input=await body(request);requireSession(request,true);sendJson(response,200,administration.setAdministrator(id,input),headers);return true;}
       if(path==='/project-files/restore'&&method==='POST'){
         if(originalRestores>=1)throw error('原文件恢复繁忙，请稍后重试。',503);
         originalRestores++;
         try{
-          const content=await readOriginal(request,65*1024*1024);requireSession(request,true);
+          const content=await readOriginal(request,getLimits().originalZipBytes);requireSession(request,true);
           const value=await store.restoreOriginals(id,new Blob([content]),url.searchParams.get('snapshot'),{check:()=>requireSession(request,true)});
           sendJson(response,200,value,headers);
         }finally{originalRestores--;}
@@ -147,7 +152,7 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
         return true;
       }
       if(path==='/connections'&&method==='GET'){sendJson(response,200,store.getConnections(id),headers);return true;}
-      if(path==='/connections'&&method==='PUT'){rateLimit('connections:'+id,30,MINUTE);const value=await body(request,128*1024);requireSession(request,true);sendJson(response,200,store.putConnections(id,value),headers);return true;}
+      if(path==='/connections'&&method==='PUT'){rateLimit('connections:'+id,30,MINUTE);const value=await body(request,Math.max(128*1024,getLimits().memoryTotal*4+getLimits().memoryCount*256,getLimits().connections*getLimits().connectionModels*256));requireSession(request,true);sendJson(response,200,store.putConnections(id,value),headers);return true;}
       if (path === '/project-files' && method === 'GET') { sendJson(response, 200, store.listOriginals(id), headers); return true; }
       if (path === '/project-files' && method === 'POST') {
         if (originalUploads >= 2) throw error('原文件上传繁忙，请稍后重试。', 503);
@@ -177,7 +182,7 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
       if (path === '/conversations' && method === 'GET') { sendJson(response, 200, store.listConversations(id), headers); return true; }
       const match = /^\/conversations\/([A-Za-z0-9][A-Za-z0-9_-]{7,79})$/.exec(path);
       if (match && method === 'PUT') {
-        sendJson(response, 200, store.putConversation(id, match[1], await body(request, 18 * 1024 * 1024)), headers); return true;
+        sendJson(response, 200, store.putConversation(id, match[1], await body(request, Math.max(18*1024*1024,getLimits().projectBytes+2*1024*1024,getLimits().conversationChars*4+1024*1024))), headers); return true;
       }
       if (match && method === 'DELETE') {
         const value = await body(request);
@@ -185,16 +190,16 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
       }
       if (path === '/projects' && method === 'GET') { sendJson(response, 200, store.getProjects(id), headers); return true; }
       if (path === '/instructions' && method === 'GET') { sendJson(response,200,store.listInstructions(id),headers);return true; }
-      if (path === '/instructions' && method === 'PUT') { const value=await body(request,16384);requireSession(request,true);sendJson(response,200,store.putInstructions(id,value),headers);return true; }
+      if (path === '/instructions' && method === 'PUT') { const value=await body(request,Math.max(16384,MAXIMUM_LIMITS.personalInstructionChars*4+1024));requireSession(request,true);sendJson(response,200,store.putInstructions(id,value),headers);return true; }
       if(path==='/shares'&&method==='GET'){requireSession(request,true);sendJson(response,200,store.listShares(id),headers);return true;}
-      if(path==='/shares'&&method==='POST'){const value=await body(request,132*1024);requireSession(request,true);rateLimit('shares:'+id,30,MINUTE);sendJson(response,201,store.createShare(id,value),headers);return true;}
+      if(path==='/shares'&&method==='POST'){const value=await body(request,getLimits().shareSnapshotBytes+4096);requireSession(request,true);rateLimit('shares:'+id,30,MINUTE);sendJson(response,201,store.createShare(id,value),headers);return true;}
       const shareMatch=/^\/shares\/([0-9a-f-]{36})$/.exec(path);
       if(shareMatch&&method==='DELETE'){const value=await body(request);requireSession(request,true);sendJson(response,200,store.revokeShare(id,shareMatch[1],value),headers);return true;}
       if (path === '/memories' && method === 'GET') { sendJson(response, 200, store.listMemories(id), headers); return true; }
-      if (path === '/memories' && method === 'PUT') { const value=await body(request,128*1024);requireSession(request,true);sendJson(response,200,store.putMemories(id,value),headers);return true; }
+      if (path === '/memories' && method === 'PUT') { const value=await body(request,Math.max(128*1024,MAXIMUM_LIMITS.memoryTotal*4+MAXIMUM_LIMITS.memoryCount*256));requireSession(request,true);sendJson(response,200,store.putMemories(id,value),headers);return true; }
       if (path === '/code-history' && method === 'GET') { sendJson(response, 200, store.listCodeHistory(id), headers); return true; }
       if (path === '/code-history' && method === 'POST') {
-        const value = await body(request, 10 * 1024 * 1024); requireSession(request, true);
+        const value = await body(request,getLimits().historyBytes+2*1024*1024); requireSession(request, true);
         sendJson(response, 200, store.mergeCodeHistory(id, value), headers); return true;
       }
       if (path === '/code-history' && method === 'DELETE') {
@@ -202,13 +207,13 @@ export function createAccountRoutes({ store, config, readJson, sendJson, clientI
         sendJson(response, 200, store.deleteCodeHistory(id, value), headers); return true;
       }
       if(path==='/prompt-library'&&method==='GET'){sendJson(response,200,store.listPrompts(id),headers);return true;}
-      if(path==='/prompt-library'&&method==='PUT'){sendJson(response,200,store.putPrompts(id,await body(request,1024*1024)),headers);return true;}
+      if(path==='/prompt-library'&&method==='PUT'){sendJson(response,200,store.putPrompts(id,await body(request,getLimits().promptLibraryBytes)),headers);return true;}
       if (path === '/writing-notes' && method === 'GET') { sendJson(response, 200, store.listWriting(id), headers); return true; }
       const writingMatch=/^\/writing-notes\/([A-Za-z0-9_-]{8,128})$/.exec(path);
-      if(writingMatch&&method==='PUT'){sendJson(response,200,store.putWriting(id,writingMatch[1],await body(request,2*1024*1024)),headers);return true;}
+      if(writingMatch&&method==='PUT'){sendJson(response,200,store.putWriting(id,writingMatch[1],await body(request,Math.max(2*1024*1024,getLimits().writingText*4+1024))),headers);return true;}
       if(writingMatch&&method==='DELETE'){const value=await body(request);sendJson(response,200,store.deleteWriting(id,writingMatch[1],value.revision),headers);return true;}
       if (path === '/projects' && method === 'PUT') {
-        sendJson(response, 200, store.putProjects(id, await body(request, 18 * 1024 * 1024)), headers); return true;
+        sendJson(response, 200, store.putProjects(id, await body(request, Math.max(18*1024*1024,getLimits().projectBytes+2*1024*1024,getLimits().conversationChars*4+1024*1024))), headers); return true;
       }
       sendJson(response, 404, { error: '账号接口不存在或请求方法不正确。' }, headers);
     } catch (failure) {

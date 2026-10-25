@@ -14,9 +14,9 @@ The optional code runner is a separate Linux process with pinned images, a priva
 
 Use HTTPS, disable local no-auth mode in production, restrict backend ingress and review reverse-proxy trust. Back up the complete private state directory and encryption keys privately. This source release does not include production infrastructure or credentials.
 
-## Known dependency advisory
+## Dependency review
 
-An npm audit on 2026-10-22 reports one moderate-severity advisory, [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c), propagated through `mammoth` → `argparse` → `sprintf-js` (three affected package entries). It concerns unbounded precision in formatting strings. Application-level reachability has not been established. The audit tool proposes a major rollback of `mammoth`; that rollback has not been applied. Do not treat passing tests as a clean security audit.
+On 2026-10-25 this source snapshot pins undici to 8.12.2. It addresses the upstream advisories [GHSA-xjj6-f33q-929c](https://github.com/nodejs/undici/security/advisories/GHSA-xjj6-f33q-929c), [GHSA-4qv8-2p9j-2685](https://github.com/nodejs/undici/security/advisories/GHSA-4qv8-2p9j-2685) and [GHSA-f72v-6w45-q472](https://github.com/nodejs/undici/security/advisories/GHSA-f72v-6w45-q472). A fresh npm audit after the patch reports zero known vulnerable packages. This is a dated registry check, not proof that the application has no vulnerabilities; review updates and test upgrades regularly. No production deployment is bundled with this source update.
 
 ## Shared snapshot access
 
@@ -25,3 +25,9 @@ Sharing requires explicit selection, local preview and confirmation. The public 
 ## Account-controlled upstream model services
 
 Each authenticated owner may save personal public HTTPS model endpoints and their own keys. Requests resolve credentials server-side under the current account and connection revision. Connection files use AES-256-GCM with owner-bound authenticated data and a separate private encryption key. Missing keys or corrupt files fail closed without overwriting old data. Private clients never inherit shared provider keys. Endpoint/protocol edits require reentering a key. Actual outbound sockets use a validated pinned public IP, TLS verification, no proxy inheritance and no redirects; mixed public/private DNS answers and local/metadata/reserved destinations are rejected. Use trusted providers: selected chat context is intentionally sent to the chosen service. Full private backup restoration must retain both encrypted connection records and their encryption key; never attach them to issues or public source.
+
+## Administration and data-preserving cleanup
+
+Owner binding requires an explicit existing account and a one-time 30-minute code generated in a trusted shell. The server stores only its digest; ordinary registration and shared invitation tokens grant no administrative role. Role/policy sidecars stay private, use revision checks and atomic writes, and fail closed on corruption. Administrator status controls shared budgets, not access to other owners' data or keys.
+
+Lowering a budget must not prevent revoking an existing share or turning off retained private context. Compatibility requests retain finite hard HTTP bounds, authenticated ownership and revision validation. The application permits only the implemented data-reducing/disable transitions above new business budgets. New/edited/re-enabled data and new shares still follow current business validation.

@@ -1,3 +1,4 @@
+import {withStoredLimits} from './site_limits.js';
 import {validateWritingNotes} from './writing_store.js';
 
 const KEY='plaude-writing-sync-v1', ID=/^[A-Za-z0-9_-]{8,128}$/;
@@ -23,7 +24,7 @@ export function createWritingSync({userId,store,storage,fetchImpl=globalThis.fet
     finally{clearTimeout(timeout);}
   }
   function envelope(value){
-    const notes=validateWritingNotes(value.notes),ids=new Set(notes.map(n=>n.id));
+    const notes=withStoredLimits(()=>validateWritingNotes(value.notes)),ids=new Set(notes.map(n=>n.id));
     if(!Array.isArray(value.deleted)||value.deleted.length>5000)throw Error('云端文稿版本无效，本机内容保留。');
     for(const record of value.deleted){if(!record||!ID.test(record.id)||ids.has(record.id)||!Number.isSafeInteger(record.revision)||record.revision<1)throw Error('云端文稿版本无效，本机内容保留。');ids.add(record.id);}
     return{notes,deleted:value.deleted};

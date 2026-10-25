@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 export function connectionEndpoint(value, protocol = 'chat-completions') {
   if (!['chat-completions','responses'].includes(protocol)) throw Error('请选择 Chat Completions 或 Responses。');
   if (typeof value !== 'string' || value.length > 2048 || /[\x00-\x20\x7f]/.test(value.trim())) throw Error('请输入完整的 HTTPS API 地址。');
@@ -20,7 +21,7 @@ export function validateConnection(input) {
   if(typeof input.id!=='string'||!/^mine-[a-f0-9]{24}$/.test(input.id))throw Error('连接编号无效。');
   if(typeof input.label!=='string'||!input.label.trim()||input.label.length>80||/[\x00-\x1f\x7f]/.test(input.label))throw Error('请填写最多80字符的连接名称。');
   const models=Array.isArray(input.models)?[...new Set(input.models)]:[];
-  if(!models.length||models.length>24||models.some(m=>typeof m!=='string'||!/^[~A-Za-z0-9][A-Za-z0-9._~:/+-]{0,191}$/.test(m)||m.includes('://')))throw Error('请填写1—24个有效模型 ID，每行一个。');
+  if(!models.length||models.length>getLimits().connectionModels||models.some(m=>typeof m!=='string'||!/^[~A-Za-z0-9][A-Za-z0-9._~:/+-]{0,191}$/.test(m)||m.includes('://')))throw Error('请填写1—24个有效模型 ID，每行一个。');
   if(!models.includes(input.model))throw Error('默认模型必须包含在模型列表中。');
   if(typeof input.vision!=='boolean')throw Error('图片支持开关无效。');
   if(typeof input.apiKey!=='string'||input.apiKey.length>4096||/[\x00-\x20\x7f-\uffff]/.test(input.apiKey))throw Error('API Key 须为不含空白的英文字符，最多4096字符。');

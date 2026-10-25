@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import { createExecutionHistory, executionRecord, searchExecutionHistory, HISTORY_IMPORT_BYTES } from './execution_history.js';
 import { getStorageScope } from './scoped_storage.js';
 import { initHistoryCloudPanel } from './history_cloud_panel.js';
@@ -100,7 +101,7 @@ export function initExecutionConsole(callbacks) {
     if (!file || controller || importing || cloudBusy) return;
     cancelImport(); const sequence = previewSequence, scope = getStorageScope();
     try {
-      if (file.size > HISTORY_IMPORT_BYTES) throw Error('运行历史备份最多 10 MiB。');
+      if (file.size > (getLimits().historyBytes+2*1024*1024)) throw Error('运行历史备份最多 10 MiB。');
       const plan = await history.previewImport(await file.text());
       if (sequence !== previewSequence || controller || scope !== getStorageScope()) throw Error('账户或操作已经改变，请重新选择文件。');
       importPlan = plan; importScope = scope; $('code-history-import-preview').hidden = false;

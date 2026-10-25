@@ -1,11 +1,12 @@
+import {getLimits,withStoredLimits} from './site_limits.js';
 export const PROMPT_LIBRARY_KEY = "yunjian-ai-prompt-library-v1";
-export const MAX_PROMPTS = 30;
+export const MAX_PROMPTS = getLimits().prompts;
 export const MAX_PROMPT_TITLE_CHARS = 50;
-export const MAX_PROMPT_CONTENT_CHARS = 6000;
+export const MAX_PROMPT_CONTENT_CHARS = getLimits().promptText;
 
 const EXPORT_FORMAT = "yunjian-ai-prompt-library";
 const EXPORT_VERSION = 1;
-const MAX_IMPORT_BYTES = 512 * 1024;
+const MAX_IMPORT_BYTES = Math.max(512*1024,getLimits().promptLibraryBytes);
 const PROMPT_FIELDS = ["id", "title", "content", "createdAt", "updatedAt"];
 
 function fail(message) {
@@ -51,7 +52,7 @@ function validatePrompt(value, index) {
   return {
     id: promptId(value.id, label),
     title: boundedText(value.title, MAX_PROMPT_TITLE_CHARS, `${label}的标题`),
-    content: boundedText(value.content, MAX_PROMPT_CONTENT_CHARS, `${label}的内容`),
+    content: boundedText(value.content, getLimits().promptText, `${label}的内容`),
     createdAt,
     updatedAt,
   };
@@ -60,7 +61,7 @@ function validatePrompt(value, index) {
 /** Validate and clone a complete prompt library. */
 export function validatePromptLibrary(value) {
   if (!Array.isArray(value)) fail("常用提示词数据必须是列表。");
-  if (value.length > MAX_PROMPTS) fail(`常用提示词最多保存 ${MAX_PROMPTS} 条。`);
+  if (value.length > getLimits().prompts) fail(`常用提示词最多保存 ${getLimits().prompts} 条。`);
   const seen = new Set();
   return value.map((item, index) => {
     const prompt = validatePrompt(item, index);
@@ -81,7 +82,7 @@ export function loadPromptLibrary(storage) {
     fail("浏览器内的常用提示词数据不是有效的 JSON。");
   }
   try {
-    return validatePromptLibrary(parsed);
+    return withStoredLimits(()=>validatePromptLibrary(parsed));
   } catch (error) {
     fail(`浏览器内的常用提示词无法读取：${error.message}`);
   }
@@ -89,13 +90,25 @@ export function loadPromptLibrary(storage) {
 
 export function savePromptLibrary(storage, prompts) {
   if (!storage || typeof storage.setItem !== "function") fail("浏览器存储不可用。");
-  const validated = validatePromptLibrary(prompts);
+  const {prompts:validated} = validatePromptChange(prompts, loadPromptLibrary(storage));
   try {
     storage.setItem(PROMPT_LIBRARY_KEY, JSON.stringify(validated));
   } catch (error) {
     fail(`浏览器无法保存常用提示词：${error.message}`);
   }
   return validated;
+}
+
+/** Only an unchanged, strictly smaller subset may retain old over-budget entries. */
+export function validatePromptChange(prompts, previous) {
+  const current = withStoredLimits(()=>validatePromptLibrary(previous));
+  const next = withStoredLimits(()=>validatePromptLibrary(prompts));
+  const byId = new Map(current.map(item=>[item.id,item]));
+  const removalOnly = next.length < current.length && next.every(item=>{
+    const old = byId.get(item.id);
+    return old && PROMPT_FIELDS.every(field=>item[field]===old[field]);
+  });
+  return {prompts:removalOnly?next:validatePromptLibrary(next),removalOnly};
 }
 
 function generatedId() {
@@ -112,7 +125,7 @@ function operationTime(value, label = "操作时间") {
 /** Return a new list containing the created prompt. The input list is not changed. */
 export function createPrompt(prompts, draft, options = {}) {
   const current = validatePromptLibrary(prompts);
-  if (current.length >= MAX_PROMPTS) fail(`常用提示词最多保存 ${MAX_PROMPTS} 条。`);
+  if (current.length >= getLimits().prompts) fail(`常用提示词最多保存 ${getLimits().prompts} 条。`);
   requireKnownFields(draft, ["title", "content"], "新提示词");
   requireKnownFields(options, ["id", "now"], "创建选项");
   const now = operationTime(options.now, "创建时间");
@@ -148,7 +161,7 @@ export function updatePrompt(prompts, id, changes, options = {}) {
 }
 
 export function deletePrompt(prompts, id) {
-  const current = validatePromptLibrary(prompts);
+  const current = withStoredLimits(()=>validatePromptLibrary(prompts));
   const targetId = promptId(id, "待删除提示词");
   if (!current.some((item) => item.id === targetId)) fail("找不到要删除的常用提示词。");
   return current.filter((item) => item.id !== targetId);
@@ -156,7 +169,7 @@ export function deletePrompt(prompts, id) {
 
 /** Order modes: recent, oldest, title. */
 export function orderPrompts(prompts, order = "recent") {
-  const current = validatePromptLibrary(prompts);
+  const current = withStoredLimits(()=>validatePromptLibrary(prompts));
   if (!["recent", "oldest", "title"].includes(order)) fail("不支持这种提示词排序方式。");
   return current.sort((left, right) => {
     if (order === "title") {
@@ -185,13 +198,13 @@ export function exportPromptLibrary(prompts, now = new Date()) {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
     exportedAt: date.toISOString(),
-    prompts: validatePromptLibrary(prompts),
+    prompts: withStoredLimits(()=>validatePromptLibrary(prompts)),
   }, null, 2);
 }
 
 /** Parse an exported file and merge only IDs that are not already present. */
 export function planPromptImport(text, existingPrompts = []) {
-  if (typeof text !== "string" || new TextEncoder().encode(text).length > MAX_IMPORT_BYTES) {
+  if (typeof text !== "string" || new TextEncoder().encode(text).length > Math.max(512*1024,getLimits().promptLibraryBytes)) {
     fail("提示词文件超过 512 KiB 或无法读取。");
   }
   let value;
@@ -207,8 +220,8 @@ export function planPromptImport(text, existingPrompts = []) {
   const incoming = validatePromptLibrary(value.prompts);
   const ids = new Set(existing.map((item) => item.id));
   const added = incoming.filter((item) => !ids.has(item.id));
-  if (existing.length + added.length > MAX_PROMPTS) {
-    fail(`导入后常用提示词会超过 ${MAX_PROMPTS} 条，请先删除部分旧内容。`);
+  if (existing.length + added.length > getLimits().prompts) {
+    fail(`导入后常用提示词会超过 ${getLimits().prompts} 条，请先删除部分旧内容。`);
   }
   return {
     prompts: [...existing, ...added],

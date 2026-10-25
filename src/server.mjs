@@ -1,3 +1,4 @@
+import {createSiteAdministration} from './site_administration.mjs';
 import { createGatewayServer } from "./app.mjs";
 import { loadConfig } from "./config.mjs";
 import { hydrateProviderModels } from "./model_catalog.mjs";
@@ -20,7 +21,8 @@ const sharedStore = localSharedStore && config.sharedSyncUrl
     queueFile: `${config.sharedConversationsFile}.sync-queue.json` })
   : localSharedStore;
 const accountStore = createAccountStore(config.accountStoreFile || (config.sharedConversationsFile ? join(dirname(config.sharedConversationsFile), 'accounts.json') : './data/accounts.json'));
-const server = createGatewayServer({ config, sharedStore, workspaceStore, accountStore, fetchImpl: workspaceStore.fetch });
+const administration=createSiteAdministration({file:accountStore.administrationFile,findUser:accountStore.findUserByUsername,requireUser:accountStore.requireUser});
+const server = createGatewayServer({ config, sharedStore, workspaceStore, accountStore, administration, fetchImpl: workspaceStore.fetch });
 
 server.listen(config.port, config.bindHost, () => {
   console.log(JSON.stringify({

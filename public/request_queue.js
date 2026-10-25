@@ -34,7 +34,7 @@ export function createRequestQueue(initialLimit = 2) {
   }
   return {
     setLimit(value) {
-      if (!Number.isInteger(value) || value < 1 || value > 2) throw new Error('Invalid request concurrency');
+      if (!Number.isInteger(value) || value < 1 || value > 8) throw new Error('Invalid request concurrency');
       limit = value; drain();
     },
     acquire(signal) {

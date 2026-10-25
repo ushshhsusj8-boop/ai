@@ -1,7 +1,8 @@
+import {getLimits} from './site_limits.js';
 const STATES = new Set(['text', 'ocr', 'unread', 'no_text']);
 export function validatePdfInfo(value, sections) {
   if (value === undefined) return undefined;
-  if (!value || value.version !== 1 || !Number.isInteger(value.totalPages) || value.totalPages < 1 || value.totalPages > 200
+  if (!value || value.version !== 1 || !Number.isInteger(value.totalPages) || value.totalPages < 1 || value.totalPages > getLimits().pdfPages
     || !Array.isArray(value.states) || value.states.length !== value.totalPages || value.states.some(s => !STATES.has(s))) throw Error('PDF 逐页读取状态无效。');
   const pages = value.states.flatMap((s, i) => ['text', 'ocr'].includes(s) ? [i + 1] : []);
   if (sections && (sections.length !== pages.length || sections.some((s, i) => s.label !== `第 ${pages[i]} 页`))) throw Error('PDF 页码与读取状态不一致。');

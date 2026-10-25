@@ -1,3 +1,4 @@
+import {getLimits} from './site_limits.js';
 import { createProjectStore, projectContext, PROJECT_BYTES } from './projects.js';
 import { createCloudProjectStore } from './project_cloud.js';
 import { parseDocument } from './documents.js';
@@ -20,12 +21,12 @@ export function initProjectWorkspace({ active, conversations, create, select, bu
     <p class="project-note" id="project-storage-note"></p><p id="project-sync-state" class="project-note" role="status" aria-live="polite"></p>
     <div class="project-actions"><label>选择项目 <select id="project-select" aria-label="选择项目"></select></label><button type="button" id="project-new">新建项目</button></div>
     <label>项目名称<input id="project-name" maxlength="60" placeholder="例如：网站开发 / 论文 / 工作资料"></label>
-    <label>项目指令<textarea id="project-instructions" maxlength="2000" rows="4" placeholder="关联对话共用的背景和回答要求"></textarea></label>
+    <label>项目指令<textarea id="project-instructions" maxlength="${getLimits().instructionChars}" rows="4" placeholder="关联对话共用的背景和回答要求"></textarea></label>
     <div class="project-actions"><button type="button" id="project-save">保存名称与指令</button><button type="button" id="project-copy">另存为新项目</button><button type="button" id="project-discard">放弃当前编辑</button><button type="button" id="project-delete">删除项目</button></div>
     <p id="project-draft-state" class="project-note" role="status" aria-live="polite"></p><div class="project-actions"><label>本机编辑草稿 <select id="project-drafts" aria-label="本机编辑草稿"></select></label><button type="button" id="project-restore">恢复所选草稿</button><button type="button" id="project-draft-delete">删除所选草稿</button></div>
-    <h3>统一资料</h3><p class="project-note">每项目最多 3 份，每份 5 MiB / 12 万字符，PDF 200 页；添加文件先保存解析文字，原文件需另外明确选择上传。项目和对话每次合计最多引用 3 份。修改只影响后续提问，已有回答和引用保留。</p>
+    <h3>统一资料</h3><p class="project-note">每项目最多 ${getLimits().documentCount} 份，每份 ${getLimits().documentBytes/1048576} MiB / ${getLimits().documentChars} 字符，PDF ${getLimits().pdfPages} 页；添加文件先保存解析文字，原文件需另外明确选择上传。项目和对话每次合计最多引用 ${getLimits().documentCount} 份。修改只影响后续提问，已有回答和引用保留。</p>
     <label>添加项目文件<input type="file" id="project-files" accept=".txt,.md,.csv,.json,.pdf,.docx" multiple></label><button type="button" id="project-parse-cancel" hidden>取消文件解析</button><div id="project-documents"></div>
-    <details id="project-original-vault"><summary>原文件私有保管区</summary><p class="project-note">原文件需在资料旁明确选择并上传；账户内最多60个 / 64 MiB，单个5 MiB。JSON项目备份不含原文件，可另行整批备份ZIP或逐个下载。删除项目或解析资料会保留原文件，需在此单独确认删除。</p><p id="project-original-status" class="project-note" role="status"></p><div class="project-actions"><button type="button" id="project-original-refresh">刷新原文件列表</button><button type="button" id="project-original-export">备份全部原文件 ZIP</button><button type="button" id="project-original-export-cancel" hidden>取消整批备份</button></div><div id="project-original-list"></div></details>
+    <details id="project-original-vault"><summary>原文件私有保管区</summary><p class="project-note">原文件需在资料旁明确选择并上传；账户内最多${getLimits().originalFiles}个 / ${getLimits().originalTotalBytes/1048576} MiB，单个${getLimits().originalFileBytes/1048576} MiB。JSON项目备份不含原文件，可另行整批备份ZIP或逐个下载。删除项目或解析资料会保留原文件，需在此单独确认删除。</p><p id="project-original-status" class="project-note" role="status"></p><div class="project-actions"><button type="button" id="project-original-refresh">刷新原文件列表</button><button type="button" id="project-original-export">备份全部原文件 ZIP</button><button type="button" id="project-original-export-cancel" hidden>取消整批备份</button></div><div id="project-original-list"></div></details>
     <h3>关联对话</h3><p class="project-note">加入已有对话会携带其原有历史；需要隔离主题时请在项目中新建对话。普通“开启新对话”不自动关联项目。</p>
     <div class="project-actions"><button type="button" id="project-link">关联当前对话</button><button type="button" id="project-unlink">移出当前对话</button><button type="button" id="project-chat">在项目中新建对话</button></div><div id="project-conversations"></div>
     <div class="project-actions"><button type="button" id="project-refresh">重新读取云端项目</button><button type="button" id="project-migrate" hidden>导入本机项目到此账户</button><button type="button" id="project-export">导出全部项目备份</button><label>导入项目备份<input type="file" id="project-import" accept=".json"></label></div>
@@ -42,7 +43,7 @@ export function initProjectWorkspace({ active, conversations, create, select, bu
     accept:value=>{originals=value;originalError='';},projects:()=>snapshot.projects,status});
   function drawOriginals() {
     originalRestore.refresh();
-    el('original-status').textContent = !accountId ? '请登录个人账户使用原文件云保管。访客资料仍保留在本机。' : originalError || !originals ? originalError || '原文件列表尚未读取，请刷新。' : `${originals.files.length}/60 个 · ${(originals.usedBytes / 1024 / 1024).toFixed(2)}/64 MiB；只有列表中的记录才确认已保存。`;
+    el('original-status').textContent = !accountId ? '请登录个人账户使用原文件云保管。访客资料仍保留在本机。' : originalError || !originals ? originalError || '原文件列表尚未读取，请刷新。' : `${originals.files.length}/${getLimits().originalFiles} 个 · ${(originals.usedBytes / 1024 / 1024).toFixed(2)}/${getLimits().originalTotalBytes/1048576} MiB；只有列表中的记录才确认已保存。`;
     el('original-refresh').disabled = working || !accountId;
     el('original-export').disabled = working || !accountId || !originals?.files.some(f => !f.cleanupPending);
     el('original-list').replaceChildren();
@@ -218,7 +219,7 @@ export function initProjectWorkspace({ active, conversations, create, select, bu
   el('delete').onclick = () => run(async store => { if (!discard() || !confirm('删除此项目及其资料、解除关联？聊天和已有引用仍保留。请先导出备份。')) return; await store.remove(selected, editing.revision); if (store !== activeStore()) return; selected = ''; await reloadSaved(store); status('项目已删除，聊天保留。'); });
   el('files').onchange = () => { const files = [...el('files').files]; el('files').value = ''; void run(async store => {
     if (!files.length || !discard()) return;
-    const p = structuredClone(editing); if (p.documents.length + files.length > 3) throw Error('每项目最多 3 份资料，请先删除不需要的文件。');
+    const p = structuredClone(editing); if (p.documents.length + files.length > getLimits().documentCount) throw Error(`每项目最多 ${getLimits().documentCount} 份资料，请先删除不需要的文件。`);
     parseController = new AbortController(); el('parse-cancel').hidden = false; el('parse-cancel').disabled = false;
     try {
       for (const file of files) { const result = await parseDocument(file, { full: true, signal: parseController.signal, progress: status }); p.documents.push({ id: crypto.randomUUID(), name: result.name, sections: result.sections, enabled: true, ...(result.pdfInfo ? {pdfInfo: result.pdfInfo} : {}) }); }
@@ -251,7 +252,7 @@ export function initProjectWorkspace({ active, conversations, create, select, bu
   el('unlink').onclick = () => run(async store => { if (busy()) throw Error('请等待回复完成。'); if (!discard() || !confirm('移出当前对话？已有历史内容仍保留，后续不再自动引用项目资料。')) return; await store.link(active()?.id, null); await reloadSaved(store); status('已解除当前对话关联。'); });
   el('chat').onclick = () => run(async store => { if (!discard()) return; const c = create(); await store.link(c.id, selected); await reloadSaved(store); dialog.close(); });
   el('export').onclick = () => run(async target => { await refresh(); if (target !== store) return; download('plaude-projects-backup.json', JSON.stringify(snapshot, null, 2)); status('已导出已保存的项目，请另行导出聊天备份。'); });
-  el('import').onchange = () => { const file = el('import').files[0]; el('import').value = ''; if (file) void run(async store => { if (!discard()) return; if (file.size > PROJECT_BYTES) throw Error('项目备份超过 16 MiB。'); const data = JSON.parse(await file.text()); if (!confirm('导入项目备份及对话关联？相同 ID 的冲突会拒绝。')) return; await store.import(data); await reloadSaved(store); status('项目已导入。'); }); };
+  el('import').onchange = () => { const file = el('import').files[0]; el('import').value = ''; if (file) void run(async store => { if (!discard()) return; if (file.size > getLimits().projectBytes) throw Error('项目备份超过 16 MiB。'); const data = JSON.parse(await file.text()); if (!confirm('导入项目备份及对话关联？相同 ID 的冲突会拒绝。')) return; await store.import(data); await reloadSaved(store); status('项目已导入。'); }); };
   el('refresh').onclick = () => run(async () => { keepDraft(); await reload(); status('已重新读取已保存的项目；本机编辑草稿保留，冲突时可另存为新项目。'); });
   el('migrate').onclick = () => run(async store => {
     if (!accountId || !discard()) return;
