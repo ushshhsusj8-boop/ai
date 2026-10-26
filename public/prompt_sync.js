@@ -82,8 +82,11 @@ export function createPromptSync({userId,storage,fetchImpl=globalThis.fetch,isCu
     try{
       if(busy())throw Error('请先保存编辑文字，再处理云同步。');
       const local=list(),source=mode==='legacy'?loadPromptLibrary(storage):local,value=read(),remote=await request();
+      const checkSource=()=>{if(mode==='legacy'&&fingerprint(loadPromptLibrary(storage))!==fingerprint(source))throw Error('旧本机库已在其他窗口修改，请重新迁移；最新内容已保留。');};
+      checkSource();
       if(!confirmImpl(mode==='cloud'?'读取云端库？旧本机库仍保留，可随后迁移或导出。':'将本机与云端合并？不同内容另存副本，保留云端版本及原本机旧库；容量不足时不修改。'))return false;
       if(busy())throw Error('编辑文字已改变，请先保存。');
+      checkSource();
       const prompts=mode==='cloud'?remote.prompts:merge(source,remote);
       if(fingerprint(list())!==fingerprint(local)||read()?.revision!==value?.revision)throw Error('其他窗口已修改，请重新处理。');
       write({version:1,revision:remote.revision,base:remote.prompts,prompts,migrated:value?.migrated===true||mode==='legacy'});conflict=false;ready=true;changed();await sync();return !lastError&&!conflict;
