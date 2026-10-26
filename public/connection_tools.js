@@ -1,7 +1,10 @@
 import {getLimits} from './site_limits.js';
+// A legacy 2048-character URL can expand ninefold when its path is encoded.
+// Apply one bound to the canonical endpoint, including the protocol suffix.
+export const CONNECTION_URL_MAX_LENGTH=2048*9+32;
 export function connectionEndpoint(value, protocol = 'chat-completions') {
   if (!['chat-completions','responses'].includes(protocol)) throw Error('请选择 Chat Completions 或 Responses。');
-  if (typeof value !== 'string' || value.length > 2048 || /[\x00-\x20\x7f]/.test(value.trim())) throw Error('请输入完整的 HTTPS API 地址。');
+  if (typeof value !== 'string' || value.length > CONNECTION_URL_MAX_LENGTH || /[\x00-\x20\x7f]/.test(value.trim())) throw Error('请输入完整的 HTTPS API 地址。');
   let url; try { url = new URL(value.trim()); } catch { throw Error('请输入完整的 HTTPS API 地址。'); }
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw Error('API 地址须使用 HTTPS，不能包含密码、查询参数或片段。');
   const host=url.hostname.replace(/^\[|\]$/g,'').toLowerCase();
@@ -11,7 +14,10 @@ export function connectionEndpoint(value, protocol = 'chat-completions') {
   if (/\/(?:responses|chat\/completions)$/.test(path)) {
     if(!path.endsWith(suffix)) throw Error('请求地址与所选 API 协议不一致。');
   } else path += suffix;
-  url.pathname=path; return url.toString();
+  url.pathname=path;
+  const endpoint=url.toString();
+  if(endpoint.length>CONNECTION_URL_MAX_LENGTH)throw Error('API 地址编码后过长，请缩短路径。');
+  return endpoint;
 }
 
 export function validateConnection(input) {

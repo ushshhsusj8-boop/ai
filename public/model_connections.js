@@ -1,5 +1,5 @@
 import {getLimits} from './site_limits.js';
-import {validateConnection} from './connection_tools.js';
+import {CONNECTION_URL_MAX_LENGTH,validateConnection} from './connection_tools.js';
 
 export function initModelConnections({user,reloadProviders,toast,identityChanged,busy=()=>false}) {
   const dialog=document.createElement('dialog');dialog.id='model-connections-dialog';dialog.className='settings-dialog instructions-dialog';
@@ -12,7 +12,7 @@ export function initModelConnections({user,reloadProviders,toast,identityChanged
     <form id="connections-form" hidden>
     <label for="connections-label">连接名称</label><input id="connections-label" maxlength="80" required autocomplete="off" placeholder="例如：我的模型服务">
     <label for="connections-protocol">API 协议</label><select id="connections-protocol"><option value="chat-completions">OpenAI 兼容 · Chat Completions</option><option value="responses">OpenAI 兼容 · Responses</option></select>
-    <label for="connections-url">API Base URL 或完整请求地址</label><input id="connections-url" type="url" required maxlength="2048" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1">
+    <label for="connections-url">API Base URL 或完整请求地址</label><input id="connections-url" type="url" required maxlength="${CONNECTION_URL_MAX_LENGTH}" autocomplete="off" spellcheck="false" placeholder="https://api.example.com/v1">
     <p class="context-help">可填服务的 Base URL，保存时补全对应协议路径；仅支持公网 HTTPS，不接受内网、本机地址或跳转。没有固定的服务商名单。</p>
     <label for="connections-key">你的 API Key</label><input id="connections-key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false">
     <p id="connections-key-note" class="context-help"></p>
