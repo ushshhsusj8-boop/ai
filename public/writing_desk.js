@@ -3,7 +3,7 @@ import {scopedStorage,globalStorage,getStorageScope} from './scoped_storage.js';
 import {createWritingStore} from './writing_store.js';
 import {trapSidebarTab} from './accessibility.js';
 import {createWritingSync} from './writing_sync.js';
-import {writingBackup,writingBackupDrafts} from './writing_backups.js';
+import {writingBackup,writingBackupDrafts,validateWritingBackupSize} from './writing_backups.js';
 export function initWritingDesk({insert,toast,userId=null,onIdentityChanged}) {
   const store=createWritingStore(scopedStorage), panel=document.createElement('aside');
   panel.id='writing-panel';panel.className='writing-panel';panel.hidden=true;panel.setAttribute('aria-labelledby','writing-heading');
@@ -64,7 +64,7 @@ export function initWritingDesk({insert,toast,userId=null,onIdentityChanged}) {
   $('insert').onclick=()=>insert($('text').value);
   const download=(name,text,type)=>{const url=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
   backupButton.onclick=()=>{if(!flush())return;try{download('plaude-writing-'+new Date().toISOString().slice(0,10)+'.json',writingBackup(store.list()),'application/json;charset=utf-8');toast('此设备已载入的全部文稿已导出；云端未读的新内容需先同步。');}catch(e){$('status').textContent=e.message;}};
-  importButton.onclick=()=>file.click();file.onchange=async()=>{const incoming=file.files?.[0];file.value='';if(!incoming||!flush())return;try{if(incoming.size>4*1024*1024)throw Error('文稿备份超过4 MiB。');const drafts=writingBackupDrafts(await incoming.text());if(!confirm(`导入${drafts.length}份文稿？相同内容跳过，其他内容创建新编号；现有文稿保留${sync?'，副本将同步到此账户':''}。`))return;const added=store.importDrafts(drafts);library();sync?.schedule();toast(`已导入${added}份文稿，相同内容已跳过。`);}catch(e){$('status').textContent='未导入：'+e.message;}};
+  importButton.onclick=()=>file.click();file.onchange=async()=>{const incoming=file.files?.[0];file.value='';if(!incoming||!flush())return;try{validateWritingBackupSize(incoming.size);const drafts=writingBackupDrafts(await incoming.text());if(!confirm(`导入${drafts.length}份文稿？相同内容跳过，其他内容创建新编号；现有文稿保留${sync?'，副本将同步到此账户':''}。`))return;const added=store.importDrafts(drafts);library();sync?.schedule();toast(`已导入${added}份文稿，相同内容已跳过。`);}catch(e){$('status').textContent='未导入：'+e.message;}};
   if(userId){
     $('sync-status').hidden=false;panel.querySelector('.writing-sync-actions').hidden=false;
     sync=createWritingSync({userId,store,storage:scopedStorage,isCurrent:()=>getStorageScope()===userId,onIdentityChanged,
