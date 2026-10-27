@@ -292,8 +292,8 @@ export function planImport(text, storage) {
   if (existingPresets.length + newPresets.length > getLimits().customPresets) {
     fail("导入后预设会超过 20 个，请先删除部分旧预设，再重试。");
   }
-  if (existingPrompts.length + newPrompts.length > 30) {
-    fail("导入后提示词会超过 30 条，请先删除部分旧提示词，再重试。");
+  if (existingPrompts.length + newPrompts.length > getLimits().prompts) {
+    fail(`导入后提示词会超过 ${getLimits().prompts} 条，请先删除部分旧提示词，再重试。`);
   }
   if (existingFavorites.length + newFavorites.length > 80) fail("导入后模型收藏会超过 80 条，请先移除部分收藏。");
   return {
