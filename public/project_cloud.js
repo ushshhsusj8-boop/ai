@@ -29,8 +29,14 @@ function accountCache(database, userId) {
       const store = tx.objectStore('accounts'); let result;
       tx.oncomplete = () => resolve(result);
       tx.onerror = tx.onabort = () => reject(Error('离线缓存读取或保存失败。'));
-      if (value === undefined) { const request = store.get(userId); request.onsuccess = () => { result = request.result; }; }
-      else store.put(value, userId);
+      const request = store.get(userId);
+      request.onsuccess = () => {
+        if (value === undefined) { result = request.result; return; }
+        let saved;
+        try { saved = envelope(request.result); } catch { /* Replace an invalid cache with a validated server response. */ }
+        result = saved && saved.revision > value.revision ? saved : value;
+        if (result === value) store.put(value, userId);
+      };
     });
   }
   return { read: () => access(), write: value => access(value) };
@@ -40,7 +46,7 @@ export function createCloudProjectStore({ userId, fetchImpl = globalThis.fetch, 
   if (typeof userId !== 'string' || !userId || userId.length > 128) throw Error('请先登录后打开云端项目。');
   const cache = accountCache(database, userId);
   let state = { mode: 'cloud', offline: false, cached: false, cacheUnavailable: false, revision: null };
-  let queue = Promise.resolve();
+  let queue = Promise.resolve(), latest;
   async function request(method, value) {
     const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
     let response;
@@ -71,10 +77,11 @@ export function createCloudProjectStore({ userId, fetchImpl = globalThis.fetch, 
     } finally { clearTimeout(timeout); }
   }
   async function remember(value) {
-    try { await cache.write(value); state.cacheUnavailable = false; }
+    try { value = await cache.write(value); state.cacheUnavailable = false; }
     catch { state.cacheUnavailable = true; }
-    state = { ...state, offline: false, cached: false, revision: value.revision };
-    return value;
+    if (!latest || value.revision >= latest.revision) latest = value;
+    state = { ...state, offline: false, cached: false, revision: latest.revision };
+    return latest;
   }
   async function online() { return remember(await request('GET')); }
   async function mutate(change) {

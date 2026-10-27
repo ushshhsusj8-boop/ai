@@ -133,3 +133,53 @@ test('same-tab concurrent writes are serialized and imports refuse conflicts wit
   assert.equal((await store.read()).links.length, 2);
   await store.remove('project-first', 1); assert.equal((await store.read()).links.length, 0);
 });
+
+const snapshot = (revision, projects = [{ ...project(), revision, name: `项目版本${revision}` }]) => ({ projects: { version: 1, projects, links: [] }, revision });
+function delayedReads() {
+  const pending = [];
+  return { pending, fetch: () => new Promise(resolve => pending.push(resolve)) };
+}
+test('a late older GET cannot regress the returned library, status or persisted offline snapshot', async () => {
+  const database = memoryDatabase(), remote = delayedReads();
+  const store = createCloudProjectStore({ userId: 'user-one', database, fetchImpl: remote.fetch });
+  const older = store.read(), newer = store.read();
+  remote.pending[1](reply(snapshot(2))); assert.equal((await newer).projects[0].name, '项目版本2');
+  remote.pending[0](reply(snapshot(1))); assert.equal((await older).projects[0].name, '项目版本2');
+  assert.equal(store.status.revision, 2);
+  const reloaded = createCloudProjectStore({ userId: 'user-one', database, fetchImpl: async () => { throw Error('offline'); } });
+  assert.equal((await reloaded.read()).projects[0].name, '项目版本2'); assert.equal(reloaded.status.revision, 2);
+});
+test('a stale response in another client cannot resurrect a deleted project in the shared offline cache', async () => {
+  const database = memoryDatabase(), remote = delayedReads();
+  const first = createCloudProjectStore({ userId: 'user-one', database, fetchImpl: remote.fetch });
+  const second = createCloudProjectStore({ userId: 'user-one', database, fetchImpl: remote.fetch });
+  const older = first.read(), removed = second.read();
+  remote.pending[1](reply(snapshot(3, []))); await removed;
+  remote.pending[0](reply(snapshot(2))); assert.deepEqual((await older).projects, []); assert.equal(first.status.revision, 3);
+  const offline = async () => { throw Error('offline'); };
+  const reloaded = createCloudProjectStore({ userId: 'user-one', database, fetchImpl: offline });
+  assert.deepEqual((await reloaded.read()).projects, []); assert.equal(reloaded.status.revision, 3);
+  await assert.rejects(createCloudProjectStore({ userId: 'user-two', database, fetchImpl: offline }).read(), /无法连接/);
+});
+test('out-of-order successful reads retain the latest in-memory revision when IndexedDB is unavailable', async () => {
+  const remote = delayedReads();
+  const store = createCloudProjectStore({ userId: 'user-one', database: null, fetchImpl: remote.fetch });
+  const older = store.read(), newer = store.read();
+  remote.pending[1](reply(snapshot(4))); await newer;
+  remote.pending[0](reply(snapshot(1))); assert.equal((await older).projects[0].revision, 4);
+  assert.equal(store.status.revision, 4); assert.equal(store.status.cacheUnavailable, true);
+});
+test('an invalid cache with a higher numeric revision does not block a validated server snapshot', async () => {
+  const database = memoryDatabase();
+  await new Promise(resolve => {
+    const request = database.open('plaude-project-cloud-v1', 1);
+    request.onsuccess = () => {
+      const tx = request.result.transaction('accounts', 'readwrite');
+      tx.oncomplete = resolve; tx.objectStore('accounts').put({ revision: 100, projects: { invalid: true } }, 'user-one');
+    };
+  });
+  const store = createCloudProjectStore({ userId: 'user-one', database, fetchImpl: async () => reply(snapshot(1)) });
+  assert.equal((await store.read()).projects[0].revision, 1);
+  const reloaded = createCloudProjectStore({ userId: 'user-one', database, fetchImpl: async () => { throw Error('offline'); } });
+  assert.equal((await reloaded.read()).projects[0].revision, 1);
+});
