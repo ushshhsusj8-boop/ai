@@ -48,7 +48,7 @@ let modernUI;
 let writingDesk;
 let promptSync;
 
-import { normalizeContextSettings, findConversationMessages, speechChunks, filterModelOptions, validateModelFavorites } from "./conversation_tools.js";
+import { normalizeContextSettings, findConversationMessages, speechChunks, filterModelOptions, validateModelFavorites, mergeConversationDrafts } from "./conversation_tools.js";
 
 const STORAGE_KEY = "yunjian-ai-conversations-v1";
 const TOKEN_KEY = "yunjian-ai-gateway-token";
@@ -262,6 +262,7 @@ const state = {
   speechGeneration: 0,
   modelFavorites: loadModelFavorites(),
 };
+let draftBaseline=structuredClone(state.drafts),draftPersistWarning=false;
 
 function validUsage(value) {
   if (!value || typeof value !== "object") return null;
@@ -539,9 +540,12 @@ function hasConversationContent(conversation) {
 function persistDrafts() {
   try {
     const entries = Object.entries(state.drafts).filter(([, content]) => content.trim());
-    scopedStorage.setItem(DRAFTS_KEY, JSON.stringify(Object.fromEntries(entries)));
+    const next=mergeConversationDrafts(draftBaseline,loadDrafts(),Object.fromEntries(entries));
+    scopedStorage.setItem(DRAFTS_KEY, JSON.stringify(next));
+    state.drafts=next;draftBaseline=structuredClone(next);draftPersistWarning=false;
     return true;
-  } catch {
+  } catch(error) {
+    if(error?.code==='DRAFT_COUNT'&&!draftPersistWarning){showToast(error.message);draftPersistWarning=true;}
     // Draft saving is best-effort; the current textarea remains usable.
     return false;
   }

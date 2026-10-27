@@ -1,4 +1,17 @@
 import {getLimits} from './site_limits.js';
+// Apply only this page's edits to the latest map; unchanged sibling drafts belong
+// to the other page that last saved them.
+export function mergeConversationDrafts(baseline,current,edited,maxCount=getLimits().draftCount) {
+  const merged=new Map(Object.entries(current));
+  for(const id of new Set([...Object.keys(baseline),...Object.keys(edited)])) {
+    const before=Object.hasOwn(baseline,id),after=Object.hasOwn(edited,id);
+    if(before===after&&(!after||baseline[id]===edited[id]))continue;
+    if(after)merged.set(id,edited[id]);else merged.delete(id);
+  }
+  if(merged.size>maxCount&&[...merged.keys()].some(id=>!Object.hasOwn(current,id)))
+    throw Object.assign(Error(`已达到${maxCount}份草稿预算，其他页面的草稿已保留。当前文字尚未保存，请先复制保留或清理旧草稿。`),{code:'DRAFT_COUNT'});
+  return Object.fromEntries(merged);
+}
 export function normalizeContextSettings(value) {
   return {
     historyTurns: Number.isInteger(value?.historyTurns) && value.historyTurns >= 0 && value.historyTurns <= getLimits().historyTurns
