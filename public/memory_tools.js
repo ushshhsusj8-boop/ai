@@ -57,3 +57,13 @@ export function planMemoryImport(current, incoming, newId = () => crypto.randomU
   }
   return {library:validateMemories(library),added,skipped};
 }
+export function planMemoryEdit(current, {id = null, text, always}, baseline = null, newId = () => crypto.randomUUID()) {
+  const library = withStoredLimits(() => validateMemories(current));
+  const index = id ? library.entries.findIndex(entry => entry.id === id) : -1;
+  if (id && index < 0) throw Error('这条记忆已不存在，文字仍保留；请复制编辑后另存。');
+  const previous = library.entries[index];
+  if (id && (!baseline || baseline.id !== id || previous.text !== baseline.text || previous.always !== baseline.always)) throw Error('这条记忆已更新，未覆盖新版；当前文字仍保留。请先复制草稿，再重新选择这条记忆核对后保存。');
+  const item = {id: id || newId(), text, always, enabled: previous?.enabled ?? true};
+  if (index < 0) library.entries.push(item); else library.entries[index] = item;
+  return validateMemories(library);
+}

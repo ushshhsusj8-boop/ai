@@ -1,5 +1,5 @@
 import {getLimits,withStoredLimits} from './site_limits.js';
-import {validateMemories,validateMemoryChange,selectMemories,memoryContext,memoryBackup,parseMemoryBackup,planMemoryImport} from './memory_tools.js';
+import {validateMemories,validateMemoryChange,selectMemories,memoryContext,memoryBackup,parseMemoryBackup,planMemoryImport,planMemoryEdit} from './memory_tools.js';
 export function createMemoryClient({userId,fetchImpl=globalThis.fetch,isCurrent=()=>true,onIdentityChanged=()=>{}}) {
   let snapshot=null;
   const identity=()=>{if(!userId||!isCurrent())throw Error('账户已切换，请重新打开长期记忆。');};
@@ -56,9 +56,9 @@ export function initAccountMemory({user,currentUser,identityChanged,toast,change
     for(const item of snapshot?.library.entries||[]){
       const row=document.createElement('article'),p=document.createElement('p'),actions=document.createElement('div');p.textContent=item.text;actions.className='project-actions';
       const add=(label,fn)=>{const b=document.createElement('button');b.type='button';b.className='text-button';b.textContent=label;b.onclick=fn;b.disabled=working;actions.append(b);};
-      add('编辑',()=>{if($('text').value.trim()&&!confirm('替换当前未保存的记忆编辑？'))return;editing=item.id;$('text').value=item.text;$('always').checked=item.always;$('edit-title').textContent='编辑记忆';$('text').focus();});
+      add('编辑',()=>{if($('text').value.trim()&&!confirm('替换当前未保存的记忆编辑？'))return;editing=structuredClone(item);$('text').value=item.text;$('always').checked=item.always;$('edit-title').textContent='编辑记忆';$('text').focus();});
       add(item.enabled?'暂停使用':'恢复使用',()=>run(async()=>{const next=client.snapshot;next.library.entries.find(e=>e.id===item.id).enabled=!item.enabled;await client.save(next.library,next.revision);message('记忆开关已保存。');}));
-      add('删除',()=>run(async()=>{if(!confirm('删除这条长期记忆？原聊天和已有回复保留。'))return;const next=client.snapshot;next.library.entries=next.library.entries.filter(e=>e.id!==item.id);await client.save(next.library,next.revision);if(editing===item.id){editing=null;$('text').value='';}message('已删除记忆。');}));
+      add('删除',()=>run(async()=>{if(!confirm('删除这条长期记忆？原聊天和已有回复保留。'))return;const next=client.snapshot;next.library.entries=next.library.entries.filter(e=>e.id!==item.id);await client.save(next.library,next.revision);if(editing?.id===item.id){editing=null;$('text').value='';}message('已删除记忆。');}));
       const tag=document.createElement('small');tag.textContent=`${item.enabled?'启用':'已暂停'} · ${item.always?'每次优先':'相关时使用'}`;row.append(p,tag,actions);$('list').append(row);
     }
     if(snapshot&&!snapshot.library.entries.length)$('list').textContent='尚无记忆，可手动添加，或在消息操作中选择“保存为记忆”。';
@@ -79,7 +79,7 @@ export function initAccountMemory({user,currentUser,identityChanged,toast,change
   $('close').onclick=close;dialog.addEventListener('cancel',e=>{e.preventDefault();close();});entry.onclick=accountEntry.onclick=chip.onclick=()=>open();
   $('refresh').onclick=()=>run(async()=>{preview=null;$('import-preview').hidden=true;await client.load();message('已读取最新记忆，当前文字编辑仍保留，请核对后保存。');});
   $('new').onclick=()=>{if($('text').value.trim()&&!confirm('清空当前未保存的记忆编辑？'))return;editing=null;$('text').value='';$('always').checked=true;$('edit-title').textContent='新增记忆';};
-  $('save').onclick=()=>run(async()=>{const next=client.snapshot,text=$('text').value.trim();if(!text)throw Error('请填写记忆内容。');const index=next.library.entries.findIndex(e=>e.id===editing);if(editing&&index<0)throw Error('这条记忆已不存在，文字仍保留；请清空编辑后另存。');const item={id:editing||crypto.randomUUID(),text,enabled:index<0?true:next.library.entries[index].enabled,always:$('always').checked};if(index<0)next.library.entries.push(item);else next.library.entries[index]=item;await client.save(next.library,next.revision);editing=null;$('text').value='';$('edit-title').textContent='新增记忆';message(item.enabled?'记忆已保存到当前账户，新聊天也可使用。':'记忆内容已保存，仍保持暂停；需要时可点击“恢复使用”。');toast('长期记忆已保存。');});
+  $('save').onclick=()=>run(async()=>{const next=client.snapshot,text=$('text').value.trim();if(!text)throw Error('请填写记忆内容。');const library=planMemoryEdit(next.library,{id:editing?.id,text,always:$('always').checked},editing),item=library.entries.find(e=>e.id===editing?.id)||library.entries.at(-1);await client.save(library,next.revision);editing=null;$('text').value='';$('edit-title').textContent='新增记忆';message(item.enabled?'记忆已保存到当前账户，新聊天也可使用。':'记忆内容已保存，仍保持暂停；需要时可点击“恢复使用”。');toast('长期记忆已保存。');});
   $('global-save').onclick=()=>{const enabled=$('global').checked;void run(async()=>{const next=client.snapshot;await client.save({...next.library,enabled},next.revision);message(enabled?'本账户长期记忆已启用。':'本账户长期记忆已关闭；已保存内容保留，可随时恢复。');});};
   $('export').onclick=()=>{const url=URL.createObjectURL(new Blob([memoryBackup(client.snapshot.library)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='plaude-memory-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);message('记忆已交给浏览器下载，请保管备份文件。');};
   $('import').onclick=()=>$('file').click();$('file').onchange=()=>{const file=$('file').files[0];$('file').value='';if(file)void run(async()=>{preview=null;$('import-preview').hidden=true;$('import-summary').textContent='';if(file.size>Math.max(128*1024,getLimits().memoryTotal*4+getLimits().memoryCount*256))throw Error('记忆备份超过128 KiB。');const next=client.snapshot,plan=planMemoryImport(next.library,parseMemoryBackup(await file.text()));preview={...plan,revision:next.revision};$('import-summary').textContent=`将新增 ${plan.added} 条，跳过 ${plan.skipped} 条重复；保留现有记忆和总开关，尚未上传。`;$('import-preview').hidden=false;});};
