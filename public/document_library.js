@@ -63,7 +63,7 @@ export function wireCitationLinks(text, article) {
   const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
   for (const node of nodes) {
     if (node.parentElement.closest('pre,code,a,button')) continue;
-    const pattern = /\[(资料[1-3]·片段\d{1,4}|\d{1,2})\]/g;
+    const pattern = /\[(资料\d{1,2}·片段\d{1,5}|\d{1,2})\]/g;
     let cursor = 0; const fragment = document.createDocumentFragment();
     for (const match of node.textContent.matchAll(pattern)) {
       const target = targets.get(match[1]); if (!target) continue;
