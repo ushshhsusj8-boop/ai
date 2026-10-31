@@ -19,7 +19,7 @@ export function openDocumentReader(doc,{source=null,query='',owner='',returnFocu
   const content=node('pre');content.id='document-reader-content';content.tabIndex=0;content.setAttribute('aria-label','资料原文');
   const coverage=node('p','ui-note',pdfCoverage(doc.pdfInfo));coverage.id='document-reader-coverage';coverage.hidden=!doc.pdfInfo;
   dialog.append(header,ownerLabel,coverage,controls,navigation,info,content);document.body.append(dialog);
-  let sectionIndex=source?.sectionIndex||0,matches=documentMatches(doc,query),current=source?matches.findIndex(m=>m.sectionIndex===sectionIndex&&m.offset===source.offset):-1;
+  let searchedQuery=input.value,sectionIndex=source?.sectionIndex||0,matches=documentMatches(doc,query),current=source?matches.findIndex(m=>m.sectionIndex===sectionIndex&&m.offset===source.offset):-1;
   if(!source&&matches.length){current=0;sectionIndex=matches[0].sectionIndex;}
   function draw() {
     select.value=sectionIndex;content.replaceChildren();const section=doc.sections[sectionIndex];
@@ -35,8 +35,8 @@ export function openDocumentReader(doc,{source=null,query='',owner='',returnFocu
   function step(direction){if(!matches.length)return;current=(current+direction+matches.length)%matches.length;sectionIndex=matches[current].sectionIndex;draw();}
   select.onchange=()=>{sectionIndex=Number(select.value);current=matches.findIndex(m=>m.sectionIndex===sectionIndex);draw();};
   let timer;
-  input.oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{matches=documentMatches(doc,input.value);current=matches.length?0:-1;if(matches.length)sectionIndex=matches[0].sectionIndex;draw();},120);};
-  input.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){e.preventDefault();clearTimeout(timer);const fresh=documentMatches(doc,input.value);const changed=fresh.length!==matches.length||fresh[0]?.text!==matches[0]?.text;matches=fresh;if(changed){current=0;if(matches.length)sectionIndex=matches[0].sectionIndex;draw();}else step(e.shiftKey?-1:1);}};
+  input.oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{searchedQuery=input.value;matches=documentMatches(doc,searchedQuery);current=matches.length?0:-1;if(matches.length)sectionIndex=matches[0].sectionIndex;draw();},120);};
+  input.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){e.preventDefault();clearTimeout(timer);const fresh=documentMatches(doc,input.value);const changed=input.value!==searchedQuery;searchedQuery=input.value;matches=fresh;if(changed){current=0;if(matches.length)sectionIndex=matches[0].sectionIndex;draw();}else step(e.shiftKey?-1:1);}};
   dialog.addEventListener('close',()=>{clearTimeout(timer);dialog.remove();if(returnFocus?.isConnected&&!returnFocus.closest('dialog:not([open])'))returnFocus.focus({preventScroll:true});},{once:true});
   draw();dialog.showModal();close.focus();return dialog;
 }
